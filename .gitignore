@@ -1,0 +1,14 @@
+# Abhängigkeiten (npm install)
+node_modules/
+
+# Persönliche Laufzeitdaten: SSH-Schlüssel der Übungs-VM, Sandbox-Token, Sandbox-Konfiguration
+# → niemals hochladen!
+data/
+
+# Editor / System
+.claude/
+.vscode/
+.idea/
+*.log
+Thumbs.db
+.DS_Store

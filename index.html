@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>rootshell</title>
+<link rel="stylesheet" href="lib/xterm.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="logo">#_</span> <span class="brand-name">rootshell</span>
+    <button id="btn-track" class="track-btn" title="Kurs wechseln: Linux oder Windows/PowerShell">🐧 Linux</button></div>
+  <div class="mode-switch" role="tablist" aria-label="Linux-Umgebung">
+    <button data-mode="browser" class="on" title="Kleines echtes Linux (BusyBox), läuft komplett im Browser – ideal für die Grundlagen">🖥 Mini-Linux</button>
+    <button data-mode="ssh" title="Vollwertiges Ubuntu in einer VM – für Installationen, Dienste und Missionen">🔌 Echte VM</button>
+    <button data-mode="ps" title="PowerShell 7 – läuft in deiner Übungs-VM">⚡ PowerShell 7</button>
+    <button data-mode="win" title="Echtes Windows 11 in der Windows-Sandbox – wird beim Beenden gelöscht">🪟 Windows-Sandbox</button>
+  </div>
+  <div class="vmstatus"><span id="vm-dot" class="dot booting"></span><span id="vm-text">Linux startet …</span></div>
+  <div class="actions">
+    <span class="only-browser">
+      <button id="btn-save" title="Speichert den kompletten Zustand des Mini-Linux (Dateien, laufende Prozesse) im Browser">💾 Zustand speichern</button>
+      <button id="btn-reset" title="Mini-Linux neu starten – alle Änderungen gehen verloren">⟳ Neu starten</button>
+    </span>
+    <span class="only-win">
+      <button id="btn-sb-start" title="Frisches Windows in der Windows-Sandbox starten" hidden>▶ Sandbox starten</button>
+      <button id="btn-sb-stop" title="Sandbox beenden – alles darin wird gelöscht" hidden>⏹ Sandbox beenden</button>
+    </span>
+    <span class="only-ssh">
+      <button id="btn-pause" title="VM einfrieren – entlastet deinen PC, weiter geht's in Sekunden" hidden>☕ Pause</button>
+      <button id="btn-resume" hidden>▶ Fortsetzen</button>
+      <button id="btn-ssh">🔌 Verbinden</button>
+    </span>
+    <button id="btn-endday" title="Alles sichern und die VM herunterfahren" hidden>🌙 Feierabend</button>
+    <button id="btn-vm">⚙ VM-Zentrale</button>
+  </div>
+</header>
+
+<main class="layout">
+  <section class="term-pane">
+    <div id="terminal"></div>
+    <div class="term-hint">Klick ins Terminal, um zu tippen · <kbd>Strg</kbd>+<kbd>C</kbd> bricht ab · <kbd>Tab</kbd> vervollständigt · <kbd>↑</kbd> letzter Befehl · Kopieren: markieren, Einfügen: Rechtsklick/<kbd>Strg</kbd>+<kbd>V</kbd></div>
+  </section>
+
+  <aside class="tutor">
+    <nav class="tabs">
+      <button data-tab="lessons" class="on">📘 Lektionen</button>
+      <button data-tab="train">🔁 Training</button>
+      <button data-tab="missions">🎯 Missionen</button>
+    </nav>
+    <div class="tabpane" data-pane="lessons">
+      <nav class="lesson-nav">
+        <select id="lesson-select" aria-label="Lektion wählen"></select>
+        <div class="progress"><div id="progress-bar"></div></div>
+        <div id="progress-text" class="progress-text"></div>
+      </nav>
+      <article id="lesson" class="lesson"></article>
+      <footer class="lesson-foot">
+        <button id="btn-prev">← Zurück</button>
+        <button id="btn-next" class="primary">Weiter →</button>
+      </footer>
+    </div>
+    <div class="tabpane lesson" data-pane="train" id="train" hidden></div>
+    <div class="tabpane lesson" data-pane="missions" id="missions" hidden></div>
+  </aside>
+</main>
+
+<!-- VM-Zentrale -->
+<dialog id="vm-dialog" class="wide">
+  <div class="dialog-head"><h3>⚙ VM-Zentrale</h3><button id="vm-close" class="ghost" aria-label="Schließen">✕</button></div>
+  <div id="job" class="job" hidden>
+    <div class="job-title"></div>
+    <div class="job-bar" hidden><div></div></div>
+    <pre></pre>
+  </div>
+  <div id="vm-body" class="vm-body"></div>
+</dialog>
+
+<!-- Kurswahl -->
+<dialog id="track-dialog" class="wide">
+  <div class="track-body">
+    <h3>Was möchtest du lernen?</h3>
+    <p class="muted">Du kannst jederzeit oben links wechseln – dein Fortschritt bleibt in beiden Kursen erhalten.</p>
+    <div class="track-cards">
+      <button data-track="linux" class="track-card">
+        <span class="track-icon">🐧</span><b>Linux</b>
+        <span>Shell, Dateien, Rechte, Prozesse – dann Server-Dienste wie Webserver, DNS, DHCP, Docker und Selbst-Hosting.</span>
+        <small>Mini-Linux im Browser + Ubuntu-VM</small>
+      </button>
+      <button data-track="windows" class="track-card">
+        <span class="track-icon">🪟</span><b>Windows · PowerShell</b>
+        <span>Cmdlets, Objekt-Pipeline, Skripte, CSV/JSON, Fehlerbehandlung – und Windows-Verwaltung (Dienste, Benutzer, Netzwerk, Ereignisse).</span>
+        <small>PowerShell 7 in deiner Übungs-VM + echtes Windows in der Windows-Sandbox · nichts kann deinen PC beschädigen</small>
+      </button>
+    </div>
+  </div>
+</dialog>
+
+<!-- Fremde Maschine per SSH -->
+<dialog id="ssh-dialog">
+  <form id="ssh-form" method="dialog">
+    <h3>Mit anderer Maschine verbinden (SSH)</h3>
+    <p class="muted">Z. B. eine VM auf deinem Proxmox. Die IP steht in Proxmox in der VM-Übersicht.</p>
+    <label>Host / IP <input id="ssh-host" required placeholder="z. B. 192.168.1.50" autocomplete="off"></label>
+    <div class="row">
+      <label>Benutzer <input id="ssh-user" required autocomplete="username"></label>
+      <label class="port">Port <input id="ssh-port" type="number" min="1" max="65535"></label>
+    </div>
+    <label>Passwort <input id="ssh-pass" type="password" autocomplete="current-password"></label>
+    <p class="muted small">Das Passwort wird nicht gespeichert. Die Verbindung läuft über den lokalen rootshell-Server auf deinem PC.</p>
+    <div class="dialog-actions">
+      <button value="cancel" formnovalidate>Abbrechen</button>
+      <button value="ok" class="primary">Verbinden</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Feierabend -->
+<dialog id="endday-dialog">
+  <form id="endday-form" method="dialog">
+    <h3>🌙 Feierabend</h3>
+    <p class="muted">Alles sichern und deinen PC entlasten.</p>
+    <label class="inline"><input type="checkbox" id="endday-vm" checked> Übungs-VM herunterfahren (gibt RAM &amp; CPU frei)</label>
+    <p class="muted small">Eine laufende Windows-Sandbox wird dabei immer beendet.</p>
+    <label class="inline"><input type="checkbox" id="endday-mini" checked> Zustand des Mini-Linux speichern</label>
+    <div class="dialog-actions">
+      <button value="cancel" formnovalidate>Abbrechen</button>
+      <button value="ok" class="primary">Feierabend machen</button>
+    </div>
+  </form>
+</dialog>
+<dialog id="bye-dialog">
+  <form method="dialog">
+    <h3>Schönen Feierabend! 👋</h3>
+    <p id="bye-text"></p>
+    <p class="muted small">Du kannst das Browserfenster und das Server-Fenster (start.bat) jetzt schließen.</p>
+    <div class="dialog-actions"><button class="primary">OK</button></div>
+  </form>
+</dialog>
+
+<!-- Auto-Pause -->
+<dialog id="idle-dialog">
+  <form method="dialog">
+    <h3>☕ Noch da?</h3>
+    <p>Du hast eine Weile nichts eingegeben. Die VM wird in <b id="idle-left">60</b> Sekunden pausiert, um deinen PC zu entlasten.</p>
+    <div class="dialog-actions"><button id="idle-stay" class="primary">Ich bin noch da</button></div>
+  </form>
+</dialog>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="lib/xterm.js"></script>
+<script src="lib/addon-fit.js"></script>
+<script src="lib/libv86.js"></script>
+<script src="lessons.js"></script>
+<script src="drills.js"></script>
+<script src="lessons-ps.js"></script>
+<script src="lessons-win.js"></script>
+<script src="missions.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

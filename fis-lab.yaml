@@ -1,0 +1,17 @@
+#cloud-config
+# Übungs-VM für rootshell (nur für dein lokales Lab gedacht!)
+# Start unter Windows:
+#   multipass launch 24.04 --name fis-lab --cpus 2 --memory 2G --disk 15G --cloud-init fis-lab.yaml
+# Login per SSH:  Benutzer "ubuntu", Passwort "linuxlab"  (bitte in der VM mit "passwd" ändern)
+hostname: fis-lab
+ssh_pwauth: true
+chpasswd:
+  expire: false
+  users:
+    - name: ubuntu
+      password: linuxlab
+      type: text
+package_update: true
+packages:
+  - tree
+  - curl
