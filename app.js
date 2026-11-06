@@ -697,7 +697,8 @@ const subIP = (html) => html.replace(/\{\{IP\}\}/g, vmIP() || "IP-DEINER-VM");
 
 /* ---------- Lektionen ---------- */
 const GROUPS = { browser: "Teil 1 · Grundlagen im Mini-Linux", ssh: "Teil 2 · Echte VM – Installationen & Dienste (FISI)", self: "Teil 3 · Selbst hosten",
-  ps: "Teil 1 · PowerShell-Grundlagen", "ps-admin": "Teil 2 · Windows-Verwaltung", win: "Teil 3 · Echtes Windows (Sandbox)" };
+  ps: "Teil 1 · PowerShell-Grundlagen", "ps-admin": "Teil 2 · Windows-Verwaltung", win: "Teil 3 · Echtes Windows (Sandbox)",
+  script: "Teil 4 · Skripte schreiben (Bash)", "ps-script": "Teil 4 · Skripte schreiben (PowerShell)" };
 const trackOf = (l) => (l.mode === "ps" || l.mode === "win" ? "windows" : "linux");
 const trackIdx = () => LESSONS.map((l, i) => i).filter((i) => trackOf(LESSONS[i]) === (settings.track || "linux"));
 function renderNav() {

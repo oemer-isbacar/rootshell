@@ -7,8 +7,8 @@ Gebaut für Azubis und Umschüler **Fachinformatiker Systemintegration (FISI)**,
 
 | Kurs | Umgebung | Inhalt |
 |---|---|---|
-| 🐧 **Linux** | Mini-Linux im Browser (sofort, ohne Setup) + Ubuntu-VM | Shell-Grundlagen bis LEMP, DNS, DHCP, Docker, Selbst-Hosting, 10 Störfall-Missionen |
-| 🪟 **Windows · PowerShell** | PowerShell 7 in der Ubuntu-VM + echtes Windows in der Windows-Sandbox | Pipeline, Skripte, CSV/JSON, Dienste, Benutzer, NTFS, Registry, Firewall, geplante Aufgaben, 8 Missionen |
+| 🐧 **Linux** | Mini-Linux im Browser (sofort, ohne Setup) + Ubuntu-VM | Shell-Grundlagen bis LEMP, DNS, DHCP, Docker, Selbst-Hosting, **Bash-Skripte schreiben**, 13 Missionen |
+| 🪟 **Windows · PowerShell** | PowerShell 7 in der Ubuntu-VM + echtes Windows in der Windows-Sandbox | Pipeline, CSV/JSON, Dienste, Benutzer, NTFS, Registry, Firewall, geplante Aufgaben, **PowerShell-Skripte schreiben**, 10 Missionen |
 
 Nichts davon verändert deinen PC: Die VM und die Sandbox sind Wegwerf-Umgebungen.
 
@@ -63,6 +63,14 @@ Voraussetzung: Das Windows-Feature „Windows-Sandbox“ ist aktiviert (Windows 
 - **8 Lektionen** zum Ändern: Dienste (Spooler stoppen, deaktivieren, reparieren), lokale Benutzer und Gruppen (mit SID statt deutschem Gruppennamen), NTFS-Rechte mit `icacls` und SMB-Freigaben, Registry, Ereignisanzeige (eigene Ereignisse schreiben und filtern), Netzwerk und Firewall-Regeln, Skripte und geplante Aufgaben.
 - **14 Trainingskarten** und **4 Störfall-Missionen** (🪟): ein deaktivierter Druckdienst, eine neue Kollegin mit Ordnerrechten über die Gruppe, eine Sperrregel, die eine Freigabe aushebelt, und eine geplante Nachtsicherung mit falschem Pfad. Geprüft wird per Skript direkt in der Sandbox.
 - **Technik:** Die Sandbox bekommt über einen schreibgeschützten Ordner einen kleinen Agenten (`sandbox/agent.ps1` + `LabAgent.cs`). Er öffnet eine echte Windows-Konsole (ConPTY) und nimmt Prüfskripte an, nur mit zufälligem Token. Erreichbar ist er nur von deinem PC aus, denn die Sandbox hängt hinter dessen NAT.
+
+## ✍️ Teil 4: Skripte schreiben
+
+Je 6 Lektionen pro Kurs, vom ersten Skript bis zum fertigen Admin-Werkzeug:
+
+- **Bash (in der VM):** Shebang, `chmod +x` und `PATH`, Fehlersuche mit `bash -x`, Variablen, Parameter und `${VAR:-standard}`, Rechnen, `read`, Exit-Codes, `[[ ]]`, `case`, Schleifen über Listen, Dateien und CSV-Zeilen, `until`-Warteschleifen, Funktionen, `set -euo pipefail`, `trap`, `logger`, `shellcheck`. Zum Abschluss ein Systembericht mit `getopts` und cron.
+- **PowerShell (PowerShell 7 in der VM):** `param()` mit Pflichtparametern und `[Validate…]`, Hilfe-Kommentare, Vergleichsoperatoren, `switch`, eigene Objekte sammeln und exportieren, Wiederholen bis Erfolg, erweiterte Funktionen mit Pipeline-Eingabe, `-Verbose`, `-WhatIf`, Module, `$ErrorActionPreference`, mehrere `catch`-Blöcke, Exit-Codes und Protokoll. Zum Abschluss ein Aufräum-Skript mit Probelauf.
+- **17 Trainingskarten** und **5 Skript-Missionen**: Backup mit Rotation, Plattenwarnung mit Exit-Codes, Top-IPs aus dem Access-Log, CSV→JSON-Benutzerliste mit Umlauten und Log-Rotation. Die Prüfung startet dein Skript mit **eigenen Testdaten**. Fest eingetragene Lösungen fallen also durch, und typische Fehler (≥ statt >, falsche Reihenfolge beim Umbenennen …) werden konkret erklärt.
 
 ## ⚙ VM-Zentrale
 

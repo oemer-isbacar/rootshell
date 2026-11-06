@@ -292,6 +292,253 @@ done < /home/ubuntu/import/neue.csv
 [ -z "$fehlt" ] || { echo "❌ Noch nicht fertig für:$fehlt"; ls -R $h 2>/dev/null | head -20; exit 1; }
 echo "✅ Alle 5 Ordner mit Willkommensdatei angelegt – das Onboarding kann kommen."`,
 },
+/* ---------- Skript-Missionen Linux (Bash) – geprüft mit eigenen Testdaten ---------- */
+{
+  id: "msc-backup", level: 2, title: "Skript: Backup mit Rotation",
+  story: `Ein Kunde sichert seinen Projektordner bisher von Hand – wenn er daran denkt. Letzte Woche war die Platte voll, weil sich hunderte alte Sicherungen angesammelt hatten.`,
+  goal: `Schreibe <code>~/bin/backup.sh</code>: Es packt <code>~/projekt</code> als <code>~/backups/projekt-JJJJ-MM-TT_HHMMSS.tar.gz</code> und behält danach nur die <b>5 neuesten</b> Archive. Bei Erfolg Exit-Code 0. Das Skript muss auch funktionieren, wenn es aus einem anderen Ordner gestartet wird (z. B. von cron).`,
+  hints: [`Datum im Dateinamen: <code>$(date +%F_%H%M%S)</code>. Packen mit <code>tar -czf ZIEL -C "$HOME" projekt</code> – <code>-C</code> wechselt vorher in den Ordner.`,
+          `Die neuesten zuerst: <code>ls -1t ~/backups/projekt-*.tar.gz</code>. Alles ab Zeile 6: <code>tail -n +6</code>.`,
+          `Löschen, was übrig bleibt: <code>… | xargs -r rm --</code>. Und nicht vergessen: <code>chmod +x</code>, <code>mkdir -p</code> für den Zielordner und volle Pfade (<code>$HOME</code> statt relativer Pfade).`],
+  solution: `<pre>#!/bin/bash
+set -euo pipefail
+ZIEL="$HOME/backups"
+mkdir -p "$ZIEL"
+tar -czf "$ZIEL/projekt-$(date +%F_%H%M%S).tar.gz" -C "$HOME" projekt
+ls -1t "$ZIEL"/projekt-*.tar.gz | tail -n +6 | xargs -r rm --</pre>`,
+  setup: `rm -rf /home/ubuntu/projekt /home/ubuntu/backups /home/ubuntu/bin/backup.sh
+mkdir -p /home/ubuntu/projekt/docs /home/ubuntu/bin
+echo "Wichtige Notizen" > /home/ubuntu/projekt/notizen.txt
+echo "Angebot Müller GmbH" > /home/ubuntu/projekt/docs/angebot.txt
+seq 1 500 > /home/ubuntu/projekt/daten.csv
+chown -R ubuntu:ubuntu /home/ubuntu/projekt /home/ubuntu/bin
+echo ok`,
+  verify: `S=/home/ubuntu/bin/backup.sh; B=/home/ubuntu/backups
+[ -f "$S" ] || { echo "❌ ~/bin/backup.sh gibt es noch nicht."; exit 1; }
+[ -x "$S" ] || { echo "❌ ~/bin/backup.sh ist nicht ausführbar (chmod +x)."; exit 1; }
+rm -rf "$B"; mkdir -p "$B"
+for d in 01 02 03 04 05 06 07; do
+  f="$B/projekt-2026-10-$d"_020000.tar.gz
+  tar -czf "$f" -C /home/ubuntu projekt/notizen.txt
+  touch -d "2026-10-$d 02:00" "$f"
+done
+chown -R ubuntu:ubuntu "$B"
+echo "▶ Test: 7 alte Archive liegen in ~/backups, dein Skript wird aus /tmp gestartet …"
+out=$(cd /tmp && sudo -u ubuntu -H "$S" 2>&1); rc=$?
+[ -n "$out" ] && echo "$out" | tail -4 | sed 's/^/   /'
+[ $rc -eq 0 ] || { echo "❌ Exit-Code $rc – bei Erfolg muss das Skript 0 liefern."; exit 1; }
+neu=$(ls "$B" | grep -v '^projekt-2026-10-')
+n=$(echo "$neu" | grep -c .)
+[ "$n" -eq 1 ] || { echo "❌ Erwartet: genau 1 neues Archiv in ~/backups, gefunden: $n $neu"; exit 1; }
+echo "$neu" | grep -Eq '^projekt-[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{4}([0-9]{2})?\\.tar\\.gz$' || { echo "❌ Der Name passt nicht zum Muster projekt-JJJJ-MM-TT_HHMMSS.tar.gz: $neu"; exit 1; }
+tar -tzf "$B/$neu" 2>/dev/null | grep -q 'docs/angebot.txt' || { echo "❌ Im Archiv fehlt der Inhalt von ~/projekt (z. B. docs/angebot.txt)."; exit 1; }
+anz=$(ls "$B"/projekt-*.tar.gz | wc -l)
+[ "$anz" -eq 5 ] || { echo "❌ Es liegen $anz Archive in ~/backups – es sollen nur die 5 neuesten bleiben."; exit 1; }
+for d in 01 02 03; do [ -e "$B/projekt-2026-10-$d"_020000.tar.gz ] && { echo "❌ Das Archiv vom 2026-10-$d ist noch da, dafür fehlt ein neueres – gelöscht werden müssen die ältesten."; exit 1; }; done
+echo "✅ Backup läuft: neues Archiv $neu, Inhalt stimmt, nur die 5 neuesten bleiben."`,
+},
+{
+  id: "msc-platz", level: 2, title: "Skript: Warnung bei voller Platte",
+  story: `Das Monitoring soll Alarm schlagen, bevor eine Platte vollläuft. Es kann eigene Prüfskripte starten und wertet deren <b>Exit-Code</b> aus.`,
+  goal: `Schreibe <code>~/bin/platzcheck.sh SCHWELLE</code>. Für jedes echte Dateisystem (ohne <code>tmpfs</code>, <code>squashfs</code>, <code>devtmpfs</code>, <code>efivarfs</code>, <code>overlay</code>), das <b>über</b> der Schwelle in Prozent belegt ist, gibt es die Zeile <code>WARNUNG &lt;Einhängepunkt&gt; &lt;Belegung&gt;%</code> (z. B. <code>WARNUNG / 87%</code>) und am Ende Exit-Code 1. Ist alles gut: <code>OK</code> und Exit-Code 0. Fehlt die Schwelle oder ist sie keine Zahl: Hilfe auf stderr und Exit-Code 2.`,
+  hints: [`<code>df --output=target,pcent -x tmpfs -x squashfs -x devtmpfs -x efivarfs -x overlay | tail -n +2</code> liefert Einhängepunkt und Belegung.`,
+          `Zeile für Zeile: <code>while read -r ziel proz; do … done &lt; &lt;(df …)</code>. Aus <code>87%</code> wird mit <code>\${proz%\\%}</code> die Zahl 87.`,
+          `Ist es eine Zahl? <code>[[ $1 =~ ^[0-9]+$ ]]</code>. Merke dir in einer Variable, ob es eine Warnung gab, und entscheide am Ende über den Exit-Code.`],
+  solution: `<pre>#!/bin/bash
+if [[ $# -ne 1 || ! $1 =~ ^[0-9]+$ ]]; then
+  echo "Aufruf: $0 SCHWELLE (Prozent)" &gt;&amp;2
+  exit 2
+fi
+warn=0
+while read -r ziel proz; do
+  proz=\${proz%\\%}
+  if (( proz &gt; $1 )); then
+    echo "WARNUNG $ziel $proz%"
+    warn=1
+  fi
+done &lt; &lt;(df --output=target,pcent -x tmpfs -x squashfs -x devtmpfs -x efivarfs -x overlay | tail -n +2)
+(( warn )) &amp;&amp; exit 1
+echo "OK"</pre>`,
+  setup: `rm -f /home/ubuntu/bin/platzcheck.sh; mkdir -p /home/ubuntu/bin; chown ubuntu:ubuntu /home/ubuntu/bin; echo ok`,
+  verify: `S=/home/ubuntu/bin/platzcheck.sh
+[ -x "$S" ] || { echo "❌ ~/bin/platzcheck.sh fehlt oder ist nicht ausführbar."; exit 1; }
+run() { out=$(cd /tmp && sudo -u ubuntu -H "$S" "$@" 2>&1); rc=$?; }
+p=$(df --output=pcent / | tail -1 | tr -dc 0-9)
+run 1
+[ $rc -eq 1 ] || { echo "❌ Schwelle 1 %: erwartet Exit-Code 1, bekommen $rc."; exit 1; }
+echo "$out" | grep -Eq "^WARNUNG / $p%\\s*$" || { echo "❌ Schwelle 1 %: Es fehlt die Zeile 'WARNUNG / $p%'. Ausgabe:"; echo "$out" | head -5; exit 1; }
+run 100
+[ $rc -eq 0 ] || { echo "❌ Schwelle 100 %: erwartet Exit-Code 0, bekommen $rc. Ausgabe:"; echo "$out" | head -5; exit 1; }
+echo "$out" | grep -q WARNUNG && { echo "❌ Schwelle 100 %: Es darf keine Warnung kommen."; exit 1; }
+echo "$out" | grep -q OK || { echo "❌ Schwelle 100 %: Es soll 'OK' ausgegeben werden."; exit 1; }
+run "$p"
+echo "$out" | grep -Eq "^WARNUNG / " && { echo "❌ Schwelle $p % bei genau $p % Belegung: Das ist nicht ÜBER der Schwelle – für / darf keine Warnung kommen."; exit 1; }
+run
+[ $rc -eq 2 ] || { echo "❌ Ohne Parameter: erwartet Exit-Code 2, bekommen $rc."; exit 1; }
+run abc
+[ $rc -eq 2 ] || { echo "❌ Mit 'abc' als Schwelle: erwartet Exit-Code 2, bekommen $rc."; exit 1; }
+echo "✅ platzcheck.sh arbeitet korrekt: Warnungen, OK und alle Exit-Codes stimmen."`,
+},
+{
+  id: "msc-toplog", level: 3, title: "Skript: Wer ruft am häufigsten an?",
+  story: `Der Webserver ist seit heute Morgen langsam. Verdacht: Einzelne Adressen fragen ihn mit sehr vielen Anfragen ab. Du brauchst ein Werkzeug, das du auf jedes Access-Log loslassen kannst.`,
+  goal: `Schreibe <code>~/bin/toplog.sh LOGDATEI [ANZAHL]</code>. Es zeigt die ANZAHL (Standard: 3) häufigsten Client-Adressen – das ist das <b>erste Feld</b> jeder Zeile – im Format <code>&lt;Anzahl&gt; &lt;IP&gt;</code>, die häufigste zuerst. Gibt es die Datei nicht: Meldung auf stderr und Exit-Code 1. Zum Ausprobieren liegt <code>~/logs/access.log</code> bereit.`,
+  hints: [`Das erste Feld: <code>awk '{print $1}'</code> oder <code>cut -d' ' -f1</code>.`,
+          `Der Klassiker zum Zählen: <code>sort | uniq -c | sort -rn | head -n …</code>`,
+          `<code>uniq -c</code> rückt die Zahl mit Leerzeichen ein – das ist in Ordnung. Standardwert: <code>ANZAHL="\${2:-3}"</code>. Prüfen, ob die Datei lesbar ist: <code>[[ -r $1 ]]</code>.`],
+  solution: `<pre>#!/bin/bash
+set -euo pipefail
+LOG="\${1:-}"
+ANZAHL="\${2:-3}"
+if [[ ! -r $LOG ]]; then
+  echo "Fehler: Datei '$LOG' nicht lesbar. Aufruf: $0 LOGDATEI [ANZAHL]" &gt;&amp;2
+  exit 1
+fi
+awk '{print $1}' "$LOG" | sort | uniq -c | sort -rn | head -n "$ANZAHL"</pre>`,
+  setup: `mkdir -p /home/ubuntu/logs /home/ubuntu/bin; rm -f /home/ubuntu/bin/toplog.sh
+for ip in 192.168.1.10 192.168.1.10 192.168.1.10 10.0.0.7 10.0.0.7 172.16.0.3 192.168.1.10 10.0.0.7 192.168.1.44; do
+  for i in $(seq 1 $((RANDOM % 20 + 5))); do printf '%s - - [07/Nov/2026:09:%02d:11 +0100] "GET /seite%s HTTP/1.1" 200 1024 "-" "Mozilla/5.0"\\n' "$ip" $((RANDOM % 60)) "$i"; done
+done | shuf > /home/ubuntu/logs/access.log
+chown -R ubuntu:ubuntu /home/ubuntu/logs /home/ubuntu/bin; echo ok`,
+  verify: `S=/home/ubuntu/bin/toplog.sh
+[ -x "$S" ] || { echo "❌ ~/bin/toplog.sh fehlt oder ist nicht ausführbar."; exit 1; }
+T=$(mktemp /tmp/toplog-test-XXXX.log); chmod 644 "$T"
+gen() { for i in $(seq 1 "$2"); do printf '%s - - [07/Nov/2026:10:00:00 +0100] "GET /x%s HTTP/1.1" 200 512 "-" "curl"\\n' "$1" "$i"; done; }
+{ gen 203.0.113.9 41; gen 198.51.100.23 17; gen 10.20.30.40 29; gen 192.0.2.77 5; gen 172.16.5.1 11; } | shuf > "$T"
+norm() { awk 'NF {print $1, $2}'; }
+echo "▶ Test mit einem eigenen Log (andere Adressen als in deinem) …"
+out=$(cd /tmp && sudo -u ubuntu -H "$S" "$T" 2 2>&1); rc=$?
+soll=$(printf '%s\\n' "41 203.0.113.9" "29 10.20.30.40")
+[ $rc -eq 0 ] || { echo "❌ Aufruf mit Testlog und ANZAHL 2: Exit-Code $rc."; echo "$out" | head -3; rm -f "$T"; exit 1; }
+[ "$(echo "$out" | norm)" = "$soll" ] || { echo "❌ Die Top 2 stimmen nicht. Erwartet:"; echo "$soll"; echo "Bekommen:"; echo "$out" | head -5; rm -f "$T"; exit 1; }
+out=$(cd /tmp && sudo -u ubuntu -H "$S" "$T" 2>&1)
+[ "$(echo "$out" | norm | wc -l)" -eq 3 ] || { echo "❌ Ohne ANZAHL sollen es 3 Zeilen sein. Bekommen:"; echo "$out" | head -5; rm -f "$T"; exit 1; }
+echo "$out" | norm | sed -n 3p | grep -q '^17 198.51.100.23$' || { echo "❌ Platz 3 stimmt nicht (erwartet: 17 198.51.100.23)."; rm -f "$T"; exit 1; }
+rm -f "$T"
+cd /tmp && sudo -u ubuntu -H "$S" /gibt/es/nicht.log >/dev/null 2>&1; rc=$?
+[ $rc -eq 1 ] || { echo "❌ Bei fehlender Datei: erwartet Exit-Code 1, bekommen $rc."; exit 1; }
+err=$(cd /tmp && sudo -u ubuntu -H "$S" /gibt/es/nicht.log 2>&1 >/dev/null)
+[ -n "$err" ] || { echo "❌ Bei fehlender Datei soll eine Meldung auf stderr erscheinen (echo … >&2)."; exit 1; }
+echo "✅ toplog.sh funktioniert – mit fremden Logs, Standardwert und im Fehlerfall."`,
+},
+/* ---------- Skript-Missionen PowerShell (track: windows, PowerShell 7 in der VM) ---------- */
+{
+  id: "mps-konvert", track: "windows", level: 2, title: "Skript: Benutzerliste umwandeln",
+  story: `Die Personalabteilung liefert neue Mitarbeiter als CSV aus Excel. Das Anlage-Werkzeug der IT braucht aber JSON – mit fertigen Benutzernamen ohne Umlaute. Das soll ab jetzt jeden Monat ein Skript erledigen.`,
+  goal: `Schreibe <code>~/skripte/Convert-Benutzer.ps1</code> mit den Pflichtparametern <code>-CsvPfad</code> und <code>-ZielPfad</code>. Es liest die CSV (Trennzeichen <code>;</code>, Spalten Vorname, Nachname, Abteilung) und schreibt eine JSON-Liste mit den Eigenschaften <code>Benutzername</code> (<code>vorname.nachname</code>, klein, ä→ae, ö→oe, ü→ue, ß→ss), <code>Name</code> („Vorname Nachname“) und <code>Abteilung</code>. Zeilen ohne Abteilung werden mit <code>Write-Warning</code> übersprungen; dann ist der Exit-Code 1, sonst 0. Zum Ausprobieren: <code>~/hr/neue.csv</code>.`,
+  hints: [`<code>param([Parameter(Mandatory)][string]$CsvPfad, …)</code> und <code>Import-Csv $CsvPfad -Delimiter ';'</code>`,
+          `Benutzername: <code>"$($p.Vorname).$($p.Nachname)".ToLower() -replace 'ä','ae' -replace …</code>. Objekte mit <code>[PSCustomObject]@{ … }</code> bauen, in einer <code>foreach</code>-Schleife sammeln.`,
+          `Als JSON-<b>Liste</b> speichern, auch bei nur einem Eintrag: <code>ConvertTo-Json -InputObject @($liste) | Set-Content $ZielPfad</code>. Exit-Code mit <code>exit 1</code>.`],
+  solution: `<pre>param([Parameter(Mandatory)][string]$CsvPfad, [Parameter(Mandatory)][string]$ZielPfad)
+$fehlt = 0
+$liste = foreach ($p in Import-Csv $CsvPfad -Delimiter ';') {
+    if (-not $p.Abteilung) { Write-Warning "Übersprungen: $($p.Vorname) $($p.Nachname) – keine Abteilung"; $fehlt++; continue }
+    $name = "$($p.Vorname).$($p.Nachname)".ToLower() -replace 'ä','ae' -replace 'ö','oe' -replace 'ü','ue' -replace 'ß','ss'
+    [PSCustomObject]@{ Benutzername = $name; Name = "$($p.Vorname) $($p.Nachname)"; Abteilung = $p.Abteilung }
+}
+ConvertTo-Json -InputObject @($liste) | Set-Content $ZielPfad
+if ($fehlt) { exit 1 }</pre>`,
+  setup: `rm -rf /home/ubuntu/skripte/Convert-Benutzer.ps1 /home/ubuntu/hr
+mkdir -p /home/ubuntu/skripte /home/ubuntu/hr
+cat > /home/ubuntu/hr/neue.csv <<'EOF'
+Vorname;Nachname;Abteilung
+Lena;Hoffmann;Vertrieb
+Björn;Groß;IT
+Ayşe;Demir;
+Max;Becker;Buchhaltung
+EOF
+chown -R ubuntu:ubuntu /home/ubuntu/skripte /home/ubuntu/hr
+echo ok`,
+  verify: `S=/home/ubuntu/skripte/Convert-Benutzer.ps1
+[ -f "$S" ] || { echo "❌ ~/skripte/Convert-Benutzer.ps1 gibt es noch nicht."; exit 1; }
+D=$(mktemp -d /tmp/konv-XXXX); chmod 755 "$D"
+cat > "$D/test.csv" <<'EOF'
+Vorname;Nachname;Abteilung
+Jürgen;Weiß;IT
+Özlem;Kaya;Vertrieb
+Tom;Müller;
+Anna;Schäfer;Buchhaltung
+EOF
+cat > "$D/check.ps1" <<'EOF'
+param($Json)
+$u = @(Get-Content $Json -Raw | ConvertFrom-Json)
+$soll = @(
+  @{ B = 'juergen.weiss'; N = 'Jürgen Weiß'; A = 'IT' },
+  @{ B = 'oezlem.kaya'; N = 'Özlem Kaya'; A = 'Vertrieb' },
+  @{ B = 'anna.schaefer'; N = 'Anna Schäfer'; A = 'Buchhaltung' })
+if ($u.Count -ne 3) { "❌ Erwartet 3 Benutzer (Tom hat keine Abteilung), gefunden: $($u.Count)"; exit 1 }
+foreach ($s in $soll) {
+  $x = $u | Where-Object Benutzername -ceq $s.B
+  if (-not $x) { "❌ Benutzername '$($s.B)' fehlt. Vorhanden: $(@($u.Benutzername) -join ', ')"; exit 1 }
+  if ($x.Name -ne $s.N) { "❌ Bei $($s.B) steht als Name '$($x.Name)', erwartet: '$($s.N)'"; exit 1 }
+  if ($x.Abteilung -ne $s.A) { "❌ Bei $($s.B) steht als Abteilung '$($x.Abteilung)', erwartet: '$($s.A)'"; exit 1 }
+}
+"ok"
+EOF
+chown -R ubuntu:ubuntu "$D"
+echo "▶ Test mit einer anderen CSV-Datei als deiner …"
+out=$(cd /tmp && sudo -u ubuntu -H pwsh -NoProfile -NonInteractive -File "$S" -CsvPfad "$D/test.csv" -ZielPfad "$D/out.json" 2>&1); rc=$?
+out=$(echo "$out" | sed 's/\\x1b\\[[0-9;]*m//g')
+[ -n "$out" ] && echo "$out" | tail -3 | sed 's/^/   /'
+[ -f "$D/out.json" ] || { echo "❌ Die Zieldatei wurde nicht angelegt."; rm -rf "$D"; exit 1; }
+res=$(sudo -u ubuntu -H pwsh -NoProfile -NonInteractive -File "$D/check.ps1" -Json "$D/out.json" 2>&1)
+[ "$res" = ok ] || { echo "$res" | tail -3; rm -rf "$D"; exit 1; }
+[ $rc -eq 1 ] || { echo "❌ Der Inhalt stimmt! Weil aber eine Zeile übersprungen wurde, soll der Exit-Code 1 sein (bekommen: $rc)."; rm -rf "$D"; exit 1; }
+echo "$out" | grep -qi 'warn' || { echo "❌ Der Inhalt stimmt! Für die übersprungene Zeile fehlt aber eine Warnung (Write-Warning)."; rm -rf "$D"; exit 1; }
+rm -rf "$D"
+echo "✅ Klappt auch mit fremden Daten: Umlaute, fehlende Abteilung und Exit-Code stimmen."`,
+},
+{
+  id: "mps-rotate", track: "windows", level: 3, title: "Skript: Log-Rotation",
+  story: `Eine Anwendung schreibt ihre Logs seit Jahren in dieselben Dateien – inzwischen mehrere Gigabyte. Gewünscht ist eine Rotation, wie Linux sie mit logrotate macht: Das aktuelle Log wird zu <code>.1</code>, das alte <code>.1</code> zu <code>.2</code> usw., die ältesten fliegen raus.`,
+  goal: `Schreibe <code>~/skripte/Invoke-LogRotation.ps1 -Pfad ORDNER [-Behalten 3]</code>. Für <b>jede</b> <code>.log</code>-Datei im Ordner: Dateien ab <code>name.log.&lt;Behalten&gt;</code> löschen, <code>name.log.N</code> zu <code>name.log.N+1</code> umbenennen, <code>name.log</code> zu <code>name.log.1</code> und danach eine neue, leere <code>name.log</code> anlegen. Andere Dateien bleiben unberührt. Zum Ausprobieren: <code>~/applogs</code>.`,
+  hints: [`Alle Logs: <code>Get-ChildItem $Pfad -Filter *.log -File</code>. Für jedes Log arbeitest du mit dem vollen Pfad <code>$log.FullName</code>.`,
+          `Rückwärts verschieben, sonst überschreibst du Dateien: <code>for ($i = $Behalten - 1; $i -ge 1; $i--) { … Move-Item "$basis.$i" "$basis.$($i + 1)" -Force }</code>`,
+          `Vorher alles mit Nummer ≥ Behalten löschen (sonst bleiben bei kleinerem <code>-Behalten</code> alte Dateien liegen). Zum Schluss <code>Move-Item $basis "$basis.1"</code> und <code>New-Item $basis -ItemType File</code>.`],
+  solution: `<pre>param([Parameter(Mandatory)][string]$Pfad, [ValidateRange(1, 99)][int]$Behalten = 3)
+foreach ($log in Get-ChildItem $Pfad -Filter *.log -File) {
+    $basis = $log.FullName
+    Get-ChildItem "$basis.*" | Where-Object { $_.Extension -match '^\\.\\d+$' -and [int]$_.Extension.Substring(1) -ge $Behalten } | Remove-Item
+    for ($i = $Behalten - 1; $i -ge 1; $i--) {
+        if (Test-Path "$basis.$i") { Move-Item "$basis.$i" "$basis.$($i + 1)" -Force }
+    }
+    Move-Item $basis "$basis.1" -Force
+    New-Item $basis -ItemType File | Out-Null
+}</pre>`,
+  setup: `rm -rf /home/ubuntu/applogs /home/ubuntu/skripte/Invoke-LogRotation.ps1
+mkdir -p /home/ubuntu/applogs /home/ubuntu/skripte
+for i in 1 2 3 4 5; do echo "Eintrag $i" >> /home/ubuntu/applogs/shop.log; done
+echo "von gestern" > /home/ubuntu/applogs/shop.log.1
+echo "von vorgestern" > /home/ubuntu/applogs/shop.log.2
+echo "Start ok" > /home/ubuntu/applogs/api.log
+echo "Bitte nicht löschen" > /home/ubuntu/applogs/README.txt
+chown -R ubuntu:ubuntu /home/ubuntu/applogs /home/ubuntu/skripte; echo ok`,
+  verify: `S=/home/ubuntu/skripte/Invoke-LogRotation.ps1
+[ -f "$S" ] || { echo "❌ ~/skripte/Invoke-LogRotation.ps1 gibt es noch nicht."; exit 1; }
+D=$(mktemp -d /tmp/rot-XXXX)
+echo neu > "$D/app.log"; echo eins > "$D/app.log.1"; echo zwei > "$D/app.log.2"; echo drei > "$D/app.log.3"
+echo web > "$D/web.log"; echo notiz > "$D/liesmich.txt"
+chown -R ubuntu:ubuntu "$D"
+inh() { if [ -f "$D/$1" ]; then tr -d '\\r\\n' < "$D/$1"; else echo "(fehlt)"; fi; }
+fail() { echo "❌ $1"; echo "   Ordner danach:"; for f in $(ls "$D"); do echo "   $f: $(inh "$f")"; done; rm -rf "$D"; exit 1; }
+echo "▶ Test in einem eigenen Ordner: app.log mit .1 bis .3, web.log, liesmich.txt – Aufruf mit -Behalten 3 …"
+out=$(cd /tmp && sudo -u ubuntu -H pwsh -NoProfile -NonInteractive -File "$S" -Pfad "$D" -Behalten 3 2>&1); rc=$?
+[ $rc -eq 0 ] || fail "Exit-Code $rc. Ausgabe: $(echo "$out" | tail -2)"
+[ "$(inh app.log.1)" = neu ] || fail "app.log.1 soll den bisherigen Inhalt von app.log haben (neu)."
+[ "$(inh app.log.2)" = eins ] || fail "app.log.2 soll den bisherigen Inhalt von app.log.1 haben (eins)."
+[ "$(inh app.log.3)" = zwei ] || fail "app.log.3 soll den bisherigen Inhalt von app.log.2 haben (zwei)."
+[ -e "$D/app.log.4" ] && fail "app.log.4 darf es nicht geben – mit -Behalten 3 fliegt die älteste Datei raus."
+[ -f "$D/app.log" ] || fail "Nach dem Rotieren muss es wieder eine leere app.log geben."
+[ -z "$(inh app.log)" ] || fail "Die neue app.log soll leer sein."
+[ "$(inh web.log.1)" = web ] || fail "web.log wurde nicht rotiert – ALLE .log-Dateien im Ordner sollen rotiert werden."
+{ [ "$(inh liesmich.txt)" = notiz ] && [ ! -e "$D/liesmich.txt.1" ]; } || fail "liesmich.txt ist keine .log-Datei und darf nicht angefasst werden."
+echo "▶ Zweiter Lauf mit -Behalten 1 …"
+sudo -u ubuntu -H pwsh -NoProfile -NonInteractive -File "$S" -Pfad "$D" -Behalten 1 >/dev/null 2>&1
+n=$(ls "$D" | grep -c '^app\\.log\\.')
+[ "$n" -eq 1 ] || fail "Mit -Behalten 1 soll nur app.log.1 übrig bleiben – gefunden: $n nummerierte app.log-Dateien."
+rm -rf "$D"
+echo "✅ Log-Rotation funktioniert – mit mehreren Logs und unterschiedlicher Anzahl."`,
+},
 /* ---------- Windows-Sandbox (track: windows, target: sandbox) – Setup & Prüfung laufen als PowerShell-Skript in der Sandbox ---------- */
 {
   id: "mws-spooler", track: "windows", target: "sandbox", level: 1, title: "Niemand kann drucken",
