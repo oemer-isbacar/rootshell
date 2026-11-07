@@ -5,6 +5,9 @@ node_modules/
 # → niemals hochladen!
 data/
 
+# Build-Ausgaben (z. B. statische Handy-Version, nur lokal)
+dist/
+
 # Editor / System
 .claude/
 .vscode/

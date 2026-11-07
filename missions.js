@@ -195,6 +195,92 @@ case "$p" in always|unless-stopped) ;; *) echo "❌ Neustart-Richtlinie ist '\${
 [ "$(docker inspect -f '{{.State.Running}}' status)" = true ] || { echo "⚠️ Richtlinie passt ($p) – aber der Container läuft gerade nicht."; exit 1; }
 echo "✅ Richtlinie '$p' gesetzt und Container läuft."`,
 },
+/* ---------- Security-Missionen (track: linux) – Blue Team: Einbruchsspuren finden und beseitigen.
+ * Das Setup spielt als root eine HARMLOSE Simulation ein (Benutzer, Dienst, Cronjob) – kein echter Schadcode.
+ * Du reagierst als Verteidiger in deiner eigenen VM. ---------- */
+{
+  id: "msec-user", level: 2, title: "🛡️ Das fremde Konto",
+  story: `Bei einem Sicherheits-Audit fällt auf der VM ein Benutzerkonto auf, das niemand aus dem Team angelegt hat – und es hat sogar <b>sudo</b>-Rechte. So etwas legen Angreifer gern als Hintertür an.`,
+  goal: `Finde das verdächtige Konto und entferne es <b>vollständig</b> (mitsamt Home-Verzeichnis und sudo-Rechten). Das reguläre Konto <code>ubuntu</code> bleibt natürlich bestehen.`,
+  hints: [`Normale Benutzer haben eine UID ab 1000: <code>getent passwd | awk -F: '$3>=1000 {print $1, $3}'</code>`,
+          `Wer darf sudo? <code>getent group sudo</code> – ein Name, der da nicht hingehört, ist dein Kandidat.`,
+          `Konto samt Home entfernen: <code>sudo deluser --remove-home NAME</code> (nimmt es auch aus allen Gruppen).`],
+  solution: `<code>sudo deluser --remove-home svc-update</code>`,
+  setup: `id svc-update >/dev/null 2>&1 || useradd -m -s /bin/bash -c "System Update Service" svc-update
+usermod -aG sudo svc-update
+echo ok`,
+  verify: `if id svc-update >/dev/null 2>&1; then echo "❌ Das Konto 'svc-update' existiert noch. Entferne es vollständig."; exit 1; fi
+if ! id ubuntu >/dev/null 2>&1; then echo "❌ Das reguläre Konto 'ubuntu' fehlt – du hast das falsche gelöscht! Mission neu starten."; exit 1; fi
+if getent group sudo | grep -qw svc-update; then echo "❌ 'svc-update' steht noch in der sudo-Gruppe."; exit 1; fi
+if [ -d /home/svc-update ]; then echo "❌ Das Home-Verzeichnis /home/svc-update ist noch da."; exit 1; fi
+echo "✅ Das eingeschleuste Konto ist vollständig entfernt, 'ubuntu' ist unversehrt."`,
+},
+{
+  id: "msec-port", level: 2, title: "🛡️ Der heimliche Dienst",
+  story: `Dein Portscan aus Teil 5 zeigt einen offenen Port <b>4444</b>, den hier niemand kennt. Etwas lauscht da und würde auch nach einem Neustart wiederkommen.`,
+  goal: `Finde heraus, welcher Dienst auf dem unerwarteten Port lauscht, stoppe ihn und sorge dafür, dass er beim nächsten Start <b>nicht</b> wiederkommt.`,
+  hints: [`Was lauscht auf 4444? <code>sudo ss -tulpn | grep 4444</code> – notiere die PID.`,
+          `Welcher Dienst steckt dahinter? <code>sudo systemctl status &lt;PID&gt;</code> nennt die Unit.`,
+          `Stoppen und dauerhaft abschalten in einem: <code>sudo systemctl disable --now &lt;dienst&gt;</code>.`],
+  solution: `<code>sudo systemctl disable --now sys-helper</code>`,
+  setup: `cat > /etc/systemd/system/sys-helper.service << 'EOF'
+[Unit]
+Description=System Helper
+[Service]
+ExecStart=/usr/bin/python3 -m http.server 4444 --bind 0.0.0.0
+Restart=always
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload
+systemctl enable --now sys-helper
+sleep 1
+echo ok`,
+  verify: `if ss -tulpn 2>/dev/null | grep -q ':4444'; then echo "❌ Auf Port 4444 lauscht noch etwas. Stoppe den Dienst."; exit 1; fi
+if systemctl is-enabled sys-helper >/dev/null 2>&1; then echo "❌ Der Dienst 'sys-helper' ist noch aktiviert und käme beim Neustart wieder. Nutze disable."; exit 1; fi
+echo "✅ Port 4444 ist zu und der heimliche Dienst startet nicht mehr."`,
+},
+{
+  id: "msec-cron", level: 3, title: "🛡️ Der manipulierte Cronjob",
+  story: `In den geplanten Aufgaben steckt ein Eintrag, der jede Minute im Hintergrund etwas ausführt und eine versteckte Datei füttert – ein typischer Weg, wie sich Angreifer dauerhaft einnisten.`,
+  goal: `Finde den verdächtigen Cronjob, entferne ihn, und beseitige auch die versteckte Datei, die er angelegt hat.`,
+  hints: [`System-Cronjobs liegen nicht nur in <code>crontab -l</code>, sondern auch in <code>/etc/cron.d/</code> und <code>/etc/crontab</code>: <code>ls -la /etc/cron.d</code>`,
+          `Sieh dir die verdächtige Datei an (<code>cat</code>): Welchen Pfad schreibt der Job? Versteckte Dateien beginnen mit einem Punkt.`,
+          `Beides löschen: <code>sudo rm /etc/cron.d/NAME</code> und die angelegte Datei.`],
+  solution: `<code>sudo rm /etc/cron.d/apache-maintenance /tmp/.sys-cache</code>`,
+  setup: `cat > /etc/cron.d/apache-maintenance << 'EOF'
+* * * * * root echo "$(date) ping" >> /tmp/.sys-cache 2>/dev/null
+EOF
+echo "vorhanden" > /tmp/.sys-cache
+echo ok`,
+  verify: `if [ -f /etc/cron.d/apache-maintenance ]; then echo "❌ /etc/cron.d/apache-maintenance existiert noch."; exit 1; fi
+if grep -rqs 'sys-cache' /etc/cron.d /etc/crontab /var/spool/cron 2>/dev/null; then echo "❌ Es gibt noch einen Cron-Eintrag, der auf die Datei verweist."; exit 1; fi
+if [ -f /tmp/.sys-cache ]; then echo "❌ Die versteckte Datei /tmp/.sys-cache ist noch da."; exit 1; fi
+echo "✅ Cronjob und seine versteckte Datei sind entfernt."`,
+},
+{
+  id: "msec-harden", level: 3, title: "🛡️ Server abriegeln",
+  story: `Nach dem Vorfall soll die VM so dicht sein, dass nur noch das Nötigste erreichbar ist. Aktuell steht ein Port offen, der nicht gebraucht wird, und die Root-Anmeldung per SSH ist erlaubt.`,
+  goal: `Sorge dafür, dass die Firewall aktiv ist und <b>nur SSH (Port 22)</b> von außen erreichbar bleibt, der unnötige Port <b>8080</b> geschlossen ist und die <b>Root-Anmeldung per SSH verboten</b> ist (<code>PermitRootLogin no</code>). SSH muss erreichbar bleiben.`,
+  hints: [`Was ist offen? <code>sudo ufw status</code>. Eine Regel löschst du mit <code>sudo ufw delete allow 8080/tcp</code>.`,
+          `Die Root-Erlaubnis steht in einer Datei unter <code>/etc/ssh/sshd_config.d/</code>. Setze dort <code>PermitRootLogin no</code> und lade SSH neu: <code>sudo systemctl reload ssh</code>.`,
+          `Prüfen kannst du mit <code>sudo ufw status</code> und <code>sudo sshd -T | grep -i permitrootlogin</code>.`],
+  solution: `<code>sudo ufw delete allow 8080/tcp; echo 'PermitRootLogin no' | sudo tee /etc/ssh/sshd_config.d/99-decoy.conf; sudo systemctl reload ssh</code>`,
+  setup: `export DEBIAN_FRONTEND=noninteractive
+command -v ufw >/dev/null || apt-get install -y -qq ufw >/dev/null 2>&1
+ufw allow OpenSSH >/dev/null 2>&1
+ufw allow 8080/tcp >/dev/null 2>&1
+ufw --force enable >/dev/null 2>&1
+printf 'PermitRootLogin yes\\n' > /etc/ssh/sshd_config.d/99-decoy.conf
+systemctl reload ssh
+echo ok`,
+  verify: `ufw status | grep -qi "Status: active" || { echo "❌ Die Firewall ist nicht aktiv (sudo ufw enable)."; exit 1; }
+ufw status | grep -Eqw '22|OpenSSH' || { echo "❌ SSH (22) ist nicht erlaubt – darüber verbindet sich rootshell. Erst SSH erlauben!"; exit 1; }
+if ufw status | grep -qw 8080; then echo "❌ Port 8080 ist noch offen. Lösche die Regel."; exit 1; fi
+rl=$(sshd -T 2>/dev/null | awk '/^permitrootlogin/{print $2}')
+[ "$rl" = no ] || { echo "❌ Root-Anmeldung per SSH ist noch erlaubt (permitrootlogin \${rl:-unbekannt}). Setze PermitRootLogin no."; exit 1; }
+echo "✅ Abgeriegelt: Firewall aktiv, nur SSH offen, Root-Login verboten."`,
+},
 /* ---------- PowerShell-Kurs (track: windows) – du arbeitest als ubuntu in PowerShell, geprüft wird von außen ---------- */
 {
   id: "mps-report", track: "windows", level: 1, title: "Bericht für die Chefin",

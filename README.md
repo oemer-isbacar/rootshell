@@ -7,7 +7,7 @@ Gebaut für Azubis und Umschüler **Fachinformatiker Systemintegration (FISI)**,
 
 | Kurs | Umgebung | Inhalt |
 |---|---|---|
-| 🐧 **Linux** | Mini-Linux im Browser (sofort, ohne Setup) + Ubuntu-VM | Shell-Grundlagen bis LEMP, DNS, DHCP, Docker, Selbst-Hosting, **Bash-Skripte schreiben**, 13 Missionen |
+| 🐧 **Linux** | Mini-Linux im Browser (sofort, ohne Setup) + Ubuntu-VM | Shell-Grundlagen bis LEMP, DNS, DHCP, Docker, Selbst-Hosting, **Bash-Skripte schreiben**, **IT-Security (Blue Team)**, 17 Missionen |
 | 🪟 **Windows · PowerShell** | PowerShell 7 in der Ubuntu-VM + echtes Windows in der Windows-Sandbox | Pipeline, CSV/JSON, Dienste, Benutzer, NTFS, Registry, Firewall, geplante Aufgaben, **PowerShell-Skripte schreiben**, 10 Missionen |
 
 Nichts davon verändert deinen PC: Die VM und die Sandbox sind Wegwerf-Umgebungen.
@@ -71,6 +71,14 @@ Je 6 Lektionen pro Kurs, vom ersten Skript bis zum fertigen Admin-Werkzeug:
 - **Bash (in der VM):** Shebang, `chmod +x` und `PATH`, Fehlersuche mit `bash -x`, Variablen, Parameter und `${VAR:-standard}`, Rechnen, `read`, Exit-Codes, `[[ ]]`, `case`, Schleifen über Listen, Dateien und CSV-Zeilen, `until`-Warteschleifen, Funktionen, `set -euo pipefail`, `trap`, `logger`, `shellcheck`. Zum Abschluss ein Systembericht mit `getopts` und cron.
 - **PowerShell (PowerShell 7 in der VM):** `param()` mit Pflichtparametern und `[Validate…]`, Hilfe-Kommentare, Vergleichsoperatoren, `switch`, eigene Objekte sammeln und exportieren, Wiederholen bis Erfolg, erweiterte Funktionen mit Pipeline-Eingabe, `-Verbose`, `-WhatIf`, Module, `$ErrorActionPreference`, mehrere `catch`-Blöcke, Exit-Codes und Protokoll. Zum Abschluss ein Aufräum-Skript mit Probelauf.
 - **17 Trainingskarten** und **5 Skript-Missionen**: Backup mit Rotation, Plattenwarnung mit Exit-Codes, Top-IPs aus dem Access-Log, CSV→JSON-Benutzerliste mit Umlauten und Log-Rotation. Die Prüfung startet dein Skript mit **eigenen Testdaten**. Fest eingetragene Lösungen fallen also durch, und typische Fehler (≥ statt >, falsche Reihenfolge beim Umbenennen …) werden konkret erklärt.
+
+## 🛡️ Teil 5: IT-Security (Blue Team)
+
+Dieser Teil übt die **Verteidiger-Seite** – und zwar ausschließlich auf deiner eigenen Übungs-VM. Es gibt kein Angriffswerkzeug gegen fremde Systeme: Die „Angriffe" sind harmlose Simulationen, die die App als Einbruchsspur in deine VM einspielt, damit du sie als Admin erkennst und beseitigst.
+
+- **5 Lektionen:** Spielregeln & Recht (nur eigene Systeme, §§ 202a–c StGB) und Angriffsfläche prüfen (`ss`, `nmap localhost`); SSH härten (`sshd_config.d`, `PermitRootLogin`); Firewall & Einbruchschutz (`ufw`, `fail2ban`); Spuren in Logs lesen (`journalctl`, `last/lastb`, Brute-Force-Muster erkennen); Updates & Schwachstellen (`apt`, `unattended-upgrades`, CVE/CVSS).
+- **9 Trainingskarten** in drei Stufen.
+- **4 Incident-Response-Missionen:** ein eingeschleustes Benutzerkonto finden und entfernen, einen heimlichen Dienst auf einem unerwarteten Port abschalten, einen manipulierten Cronjob samt versteckter Datei beseitigen und den Server abriegeln (Firewall, nur SSH offen, Root-Login verboten). Das Setup läuft als root in der VM und spielt nur harmlose Artefakte ein (ein Benutzer, ein `python3 -m http.server`, ein Cron-Eintrag) – kein echter Schadcode.
 
 ## ⚙ VM-Zentrale
 
