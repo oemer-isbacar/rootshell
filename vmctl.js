@@ -207,7 +207,14 @@ const actions = {
   },
   deleteSnapshot({ name } = {}) {
     if (!/^[A-Za-z0-9-]+$/.test(name || "")) return { error: "Ungültiger Snapshot." };
-    return newJob("Snapshot löschen", [mpStep(["delete", "--purge", `${VM}.${name}`], `Snapshot „${name}“ löschen …`)]);
+    // Hyper-V gibt die Snapshot-Platte nur bei gestoppter VM frei → ggf. kurz anhalten und danach wieder starten
+    let wasRunning = false;
+    return newJob("Snapshot löschen", [
+      async () => { wasRunning = json((await mp(["info", VM, "--format", "json"], { timeout: 30000 })).stdout)?.info?.[VM]?.state === "Running"; return true; },
+      (job) => (wasRunning ? mpStep(["stop", VM], "VM kurz anhalten (sonst bleibt die Snapshot-Datei gesperrt) …")(job) : true),
+      mpStep(["delete", "--purge", `${VM}.${name}`], `Snapshot „${name}“ löschen …`),
+      (job) => (wasRunning ? mpStep(["start", VM], "VM wieder starten …")(job) : true),
+    ]);
   },
   installPwsh() {
     return newJob("PowerShell installieren", [

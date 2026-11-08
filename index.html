@@ -10,7 +10,8 @@
 <body>
 <header class="topbar">
   <div class="brand"><span class="logo">#_</span> <span class="brand-name">rootshell</span>
-    <button id="btn-track" class="track-btn" title="Kurs wechseln: Linux oder Windows/PowerShell">🐧 Linux</button></div>
+    <button id="btn-track" class="track-btn" title="Kurs wechseln: Linux oder Windows/PowerShell">🐧 Linux</button>
+    <a id="demo-badge" class="demo-badge" href="https://github.com/oemer-isbacar/rootshell#installation" target="_blank" rel="noopener" title="Online-Demo: Mini-Linux, Training, Wargame und Prüfung laufen im Browser. Für Übungs-VM und Windows rootshell installieren." hidden>Online-Demo</a></div>
   <div class="mode-switch" role="tablist" aria-label="Linux-Umgebung">
     <button data-mode="browser" class="on" title="Kleines echtes Linux (BusyBox), läuft komplett im Browser – ideal für die Grundlagen">🖥 Mini-Linux</button>
     <button data-mode="ssh" title="Vollwertiges Ubuntu in einer VM – für Installationen, Dienste und Missionen">🔌 Echte VM</button>
@@ -33,6 +34,7 @@
       <button id="btn-ssh">🔌 Verbinden</button>
     </span>
     <button id="btn-endday" title="Alles sichern und die VM herunterfahren" hidden>🌙 Feierabend</button>
+    <button id="btn-progress" title="Fortschritt, Sicherung als Datei, Systemcheck">📊 Fortschritt</button>
     <button id="btn-vm">⚙ VM-Zentrale</button>
   </div>
 </header>
@@ -48,6 +50,8 @@
       <button data-tab="lessons" class="on">📘 Lektionen</button>
       <button data-tab="train">🔁 Training</button>
       <button data-tab="missions">🎯 Missionen</button>
+      <button data-tab="wargame" class="only-linux" title="Flaggenjagd im Mini-Linux">🏴 Wargame</button>
+      <button data-tab="exam" title="Prüfungssimulation, Themen üben, Subnetting-Trainer">🎓 Prüfung</button>
     </nav>
     <div class="tabpane" data-pane="lessons">
       <nav class="lesson-nav">
@@ -63,6 +67,8 @@
     </div>
     <div class="tabpane lesson" data-pane="train" id="train" hidden></div>
     <div class="tabpane lesson" data-pane="missions" id="missions" hidden></div>
+    <div class="tabpane lesson" data-pane="wargame" id="wargame" hidden></div>
+    <div class="tabpane lesson" data-pane="exam" id="exam" hidden></div>
   </aside>
 </main>
 
@@ -75,6 +81,18 @@
     <pre></pre>
   </div>
   <div id="vm-body" class="vm-body"></div>
+</dialog>
+
+<!-- Fortschritt -->
+<dialog id="progress-dialog" class="wide">
+  <div class="dialog-head"><h3>📊 Dein Fortschritt</h3><button id="progress-close" class="ghost" aria-label="Schließen">✕</button></div>
+  <div id="progress-body" class="vm-body"></div>
+</dialog>
+
+<!-- Systemcheck -->
+<dialog id="check-dialog" class="wide">
+  <div class="dialog-head"><h3>🩺 Systemcheck</h3><button id="check-close" class="ghost" aria-label="Schließen">✕</button></div>
+  <div id="check-body" class="vm-body"></div>
 </dialog>
 
 <!-- Kurswahl -->
@@ -159,7 +177,11 @@
 <script src="lessons-win.js"></script>
 <script src="lessons-script.js"></script>
 <script src="lessons-sec.js"></script>
+<script src="lessons-net.js"></script>
+<script src="lessons-devops.js"></script>
 <script src="missions.js"></script>
+<script src="quiz.js"></script>
+<script src="wargame.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

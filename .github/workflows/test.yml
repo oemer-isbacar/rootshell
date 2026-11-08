@@ -1,0 +1,25 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  content:
+    name: Inhalte prüfen
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Syntax aller Skripte
+        run: for f in *.js scripts/*.js test/*.js; do node --check "$f"; done
+      - name: Inhalts-Test (Lektionen, Karten, Missionen, Prüfung, Wargame)
+        run: npm test
+      - name: Online-Demo bauen
+        run: npm run build:demo

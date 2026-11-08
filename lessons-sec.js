@@ -100,6 +100,52 @@ sudo systemctl restart fail2ban`, check: { cmd: /jail\.local/ } },
     { title: "Wie geht's weiter?", text: `<ul><li>Im Tab <b>🎯 Missionen</b> warten jetzt 🛡️ <b>Security-Missionen</b>: Die App spielt eine Einbruchsspur auf deiner VM ein (ein eingeschleuster Benutzer, ein versteckter Dienst, ein manipulierter Cronjob). Du spürst sie auf und beseitigst sie – geprüft wird automatisch.</li><li>Tipp: Vor einer Mission in der VM-Zentrale einen Snapshot anlegen, dann kannst du jederzeit zurück.</li><li>Merke die Kette: <b>erkennen → eindämmen → beseitigen → härten → dokumentieren</b>.</li></ul>` },
   ],
 },
+{
+  id: "sec6-backup", mode: "ssh", group: "sec", title: "Backup & Wiederherstellung",
+  intro: `Gegen Ransomware, Hardwaredefekte und Bedienfehler hilft am Ende nur eines: ein <b>funktionierendes Backup</b>. Und „funktionierend" heißt: Du hast die Wiederherstellung schon einmal ausprobiert.`,
+  steps: [
+    { title: "Etwas Wichtiges anlegen", cmd: "sudo mkdir -p /srv/firma && echo 'Kundenliste 2026' | sudo tee /srv/firma/kunden.txt", check: { cmd: /\/srv\/firma/, out: /Kundenliste/ } },
+    { title: "Backup mit Datum im Namen", cmd: `sudo mkdir -p /var/backups/firma && sudo tar czf /var/backups/firma/firma-$(date +%F).tar.gz -C /srv firma && ls -lh /var/backups/firma`,
+      check: { cmd: /tar\s+c\w*f/, out: /firma-\d{4}-\d{2}-\d{2}\.tar\.gz/ },
+      explain: `<code>-C /srv firma</code> speichert relative Pfade (<code>firma/…</code> statt <code>/srv/firma/…</code>). So kannst du das Backup später auch an einem anderen Ort auspacken.` },
+    { title: "Hineinschauen, ohne auszupacken", cmd: "tar tzf /var/backups/firma/firma-*.tar.gz", check: { cmd: /tar\s+t\w*f/, out: /kunden\.txt/ } },
+    { title: "Der Ernstfall: Datei zerstört", cmd: ["echo 'VERSCHLUESSELT' | sudo tee /srv/firma/kunden.txt", "cat /srv/firma/kunden.txt"], check: { cmd: /cat\s+\/srv\/firma/, out: /VERSCHLUESSELT/ } },
+    { title: "Eine einzelne Datei zurückholen", cmd: "sudo tar xzf /var/backups/firma/firma-*.tar.gz -C /srv firma/kunden.txt && cat /srv/firma/kunden.txt", check: { cmd: /tar\s+x\w*f/, out: /Kundenliste 2026/ },
+      explain: `Die <b>3-2-1-Regel</b>: <b>3</b> Kopien der Daten, auf <b>2</b> verschiedenen Medien, <b>1</b> davon außer Haus (oder offline). Ein Backup auf derselben Platte schützt nicht vor Ransomware, denn die verschlüsselt alles, was sie erreicht.` },
+    { title: "Prüfsumme: Ist das Backup unversehrt?", cmd: ["cd /var/backups/firma && sha256sum firma-*.tar.gz | sudo tee SHA256SUMS", "sha256sum -c SHA256SUMS"], check: { cmd: /sha256sum\s+-c/, out: /OK/ },
+      explain: `Backup-Arten für die Prüfung: <b>Voll</b> (alles), <b>inkrementell</b> (nur Änderungen seit dem <i>letzten</i> Backup – schnell, aber zum Wiederherstellen brauchst du die ganze Kette), <b>differenziell</b> (Änderungen seit dem letzten <i>Vollbackup</i>).` },
+  ],
+},
+{
+  id: "sec7-vorfall", mode: "ssh", group: "sec", title: "Sicherheitsvorfall: Runbook & Auswertung",
+  intro: `Wenn es brennt, ist keine Zeit zum Nachdenken. Profis haben ein <b>Runbook</b>: eine Checkliste, was in welcher Reihenfolge zu tun ist. Und sie werten Logs so aus, dass Muster sofort auffallen – im Kleinen genau das, was ein <b>SIEM</b> macht.`,
+  steps: [
+    { title: "Ein Runbook schreiben", text: `Markdown ist das übliche Format – lesbar als Text und hübsch in jedem Wiki.`,
+      cmd: `mkdir -p ~/runbooks && cat > ~/runbooks/vorfall.md << 'EOF'
+# Runbook: Verdacht auf Einbruch
+
+1. Ruhe bewahren, Uhrzeit notieren, Vorgesetzte/ISB informieren
+2. Beweise sichern: \`last\`, \`ss -tunp\`, \`ps auxf\`, Logs kopieren
+3. Eindämmen: Netzwerk trennen oder Firewall dicht – NICHT ausschalten (RAM-Spuren)
+4. Ursache finden: neue Benutzer, Dienste, Cronjobs, geänderte Dateien
+5. Beseitigen und härten, Passwörter/Schlüssel tauschen
+6. Aus sauberem Backup wiederherstellen, wenn unklar ist, was verändert wurde
+7. Dokumentieren, Meldepflichten prüfen (DSGVO: 72 Stunden)
+EOF
+cat ~/runbooks/vorfall.md`, check: { cmd: /runbooks/, out: /Runbook/ },
+      explain: `Die Reihenfolge folgt dem üblichen Vorfall-Zyklus: <b>Vorbereiten → Erkennen → Eindämmen → Beseitigen → Wiederherstellen → Lehren ziehen</b>. Bei Personendaten muss der Datenschutzvorfall innerhalb von <b>72 Stunden</b> an die Aufsichtsbehörde gemeldet werden (Art. 33 DSGVO).` },
+    { title: "Beweise mit Zeitstempel sichern", cmd: `D=~/beweise/$(date +%F_%H%M) && mkdir -p $D && last > $D/last.txt && sudo ss -tunp > $D/verbindungen.txt && ps auxf > $D/prozesse.txt && ls -l $D`,
+      check: { cmd: /beweise/, out: /prozesse\.txt/ } },
+    { title: "Mini-SIEM: Anmeldungen pro Stunde", text: `Zählt die SSH-Meldungen je Stunde. Ein plötzlicher Ausschlag ist ein typisches Zeichen für einen Brute-Force-Angriff.`,
+      cmd: `sudo journalctl -u ssh --no-pager -o short-iso | awk '{print substr($1,1,13)}' | sort | uniq -c | tail`,
+      check: { cmd: /journalctl.*\|\s*awk.*uniq\s+-c/, out: /\d/ },
+      explain: `<code>-o short-iso</code> liefert Zeitstempel wie <code>2026-11-08T14:03:11</code>; die ersten 13 Zeichen sind Datum + Stunde. Ein echtes SIEM (z. B. Wazuh, Graylog, Splunk) macht das für hunderte Server gleichzeitig und schlägt bei Schwellwerten Alarm.` },
+    { title: "Was hat sich verändert?", text: `Welche Dateien unter <code>/etc</code> wurden in den letzten 24 Stunden geändert? Nach einem Einbruch ist das eine der ersten Fragen.`,
+      cmd: "sudo find /etc -type f -mtime -1 2>/dev/null | head -20", check: { cmd: /find\s+\/etc.*-mtime/ },
+      explain: `Für die Zukunft: Mit <code>aide</code> oder <code>tripwire</code> legst du eine Prüfsummen-Datenbank an und erkennst jede Änderung an Systemdateien. Das nennt man <b>File Integrity Monitoring</b>.` },
+  ],
+  outro: `Neu in den Missionen: 🛡️ <b>Ransomware-Alarm</b> (aus dem Backup wiederherstellen) und 🛡️ <b>Brute-Force im Log</b> (Angreifer-IP finden und sperren).`,
+},
 );
 
 window.DRILLS.push(
@@ -114,5 +160,8 @@ window.DRILLS.push(
 /* ---------- Security Stufe 3 ---------- */
 { id: "sx-ssh-ips", mode: "ssh", lvl: 3, after: "sec4-logs", q: "Welche IP-Adressen tauchen im SSH-Log am häufigsten auf? Zeige die Top 5.", hint: "<code>journalctl -u ssh</code>, dann die IPs mit <code>grep -oE</code> herausziehen, <code>sort | uniq -c | sort -rn</code>.", a: "sudo journalctl -u ssh --no-pager | grep -oE '([0-9]{1,3}\\.){3}[0-9]{1,3}' | sort | uniq -c | sort -rn | head -5", check: { cmd: /journalctl.*ssh/, out: /\d|^\s*$/ } },
 { id: "sx-listen-ext", mode: "ssh", lvl: 3, after: "sec4-logs", q: "Zeige alle lauschenden Ports, die <b>nicht</b> nur auf localhost gebunden sind (also von außen erreichbar).", hint: "<code>sudo ss -tulpn</code> und mit <code>grep -v</code> die 127.0.0.1- und ::1-Zeilen ausblenden.", a: "sudo ss -tulpn | grep LISTEN | grep -v '127.0.0.1\\|::1'", check: { cmd: /ss\s+-\w.*grep|grep.*LISTEN/, out: /\w|^\s*$/ } },
+{ id: "sx-backup", mode: "ssh", lvl: 2, after: "sec6-backup", q: "Sichere <code>/etc/hostname</code> und <code>/etc/hosts</code> in das Archiv <code>/tmp/netz.tar.gz</code>.", a: "sudo tar czf /tmp/netz.tar.gz /etc/hostname /etc/hosts", check: { cmd: /tar\s+c\w*z\w*f\s+\/tmp\/netz\.tar\.gz/ } },
+{ id: "sx-tlist", mode: "ssh", lvl: 1, after: "sec6-backup", q: "Zeige den Inhalt eines <code>.tar.gz</code>-Archivs in <code>/var/backups/firma/</code>, ohne es auszupacken.", a: "tar tzf /var/backups/firma/firma-*.tar.gz", check: { cmd: /tar\s+t\w*f/ } },
+{ id: "sx-mtime", mode: "ssh", lvl: 3, after: "sec7-vorfall", q: "Finde alle Dateien unter <code>/etc</code>, die in den letzten <b>2 Tagen</b> geändert wurden.", hint: "<code>find</code> mit <code>-mtime</code> – ein Minus heißt „weniger als“.", a: "sudo find /etc -type f -mtime -2", check: { cmd: /find\s+\/etc.*-mtime\s+-2/ } },
 { id: "sx-upgr", mode: "ssh", lvl: 3, after: "sec5-patch", q: "Wie viele Pakete lassen sich aktualisieren? Gib nur die Zahl aus.", hint: "<code>apt list --upgradable</code>, die Kopfzeile abziehen und zählen.", a: "apt list --upgradable 2>/dev/null | grep -c upgradable", check: { cmd: /apt\s+list\s+--upgradable/, out: /^\d+/m } },
 );

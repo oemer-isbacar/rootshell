@@ -10,7 +10,13 @@ const PS_INPUT_RE = /^PS [^>]*> (.*)$/;
 const isPS = () => mode === "ps" || mode === "win";
 const promptRe = () => (isPS() ? PS_PROMPT_RE : PROMPT_RE);
 const ANSI_RE = /\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-9;?<>=]*[ -\/]*[@-~]|\x1b[()][0-9A-Za-z]|\x1b[=>78NOMDEHc]|[\r\x07]/g;
-const KEYS = { progress: "linuxlab.progress.v1", ssh: "linuxlab.ssh.v1", drills: "linuxlab.drills.v1", missions: "linuxlab.missions.v1", settings: "linuxlab.settings.v1" };
+const KEYS = { progress: "linuxlab.progress.v1", ssh: "linuxlab.ssh.v1", drills: "linuxlab.drills.v1", missions: "linuxlab.missions.v1", settings: "linuxlab.settings.v1",
+  wargame: "linuxlab.wargame.v1", exam: "linuxlab.exam.v1" };
+const PARAMS = new URLSearchParams(location.search);
+// Online-Demo (statisch gehostet): kein lokaler Server → nur Mini-Linux, Training, Wargame und Prüfung
+const STATIC = PARAMS.has("demo") || !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+const REPO_URL = "https://github.com/oemer-isbacar/rootshell";
+const DEMO_MSG = `Das geht nur in der installierten Version (Übungs-VM bzw. Windows-Sandbox auf deinem PC). <a href="${REPO_URL}#installation" target="_blank" rel="noopener">So installierst du rootshell</a>.`;
 
 function load(key, def) { try { return Object.assign(def, JSON.parse(localStorage.getItem(key) || "{}")); } catch { return def; } }
 function save(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }
@@ -55,6 +61,7 @@ async function idbPut(key, val) {
 
 /* ---------- Server-API ---------- */
 async function api(path, body) {
+  if (STATIC) return { error: "In der Online-Demo nicht verfügbar – dafür rootshell lokal installieren." };
   const r = await fetch("/api/" + path, {
     method: body === undefined ? "GET" : "POST",
     headers: { "X-LinuxLab": "1", "Content-Type": "application/json" },
@@ -109,7 +116,7 @@ function vmFlush() {
     else if (PROMPT_RE.test(vm.bootLog)) {
       vm.loggedIn = true; vm.bootLog = "";
       vm.send(`stty rows ${term.rows} cols ${term.cols}; export PS1='\\w # '; cd ~; clear\n`);
-      if (mode === "browser") { updateStatus(); setTimeout(() => term.focus(), 200); }
+      if (mode === "browser") { updateStatus(); setTimeout(() => term.focus(), 200); if (settings.tab === "wargame") renderWargame(); }
     }
     return;
   }
@@ -146,6 +153,7 @@ function makeRemote(modeName, shell) { return {
   resize() { if (this.connected) this.ws.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows })); },
   connect(opts) {
     this.disconnect();
+    if (STATIC) return;
     this.connecting = true; this.target = opts.target === "sandbox" ? "Windows-Sandbox" : `${opts.username}@${opts.host}`;
     updateStatus();
     const ws = new WebSocket(`ws://${location.host}/ssh`);
@@ -192,6 +200,7 @@ let pwshInstalling = false;
 let sb = { state: "unknown" };   // unavailable | off | starting | ready
 let sbTimer = null;
 async function refreshSandbox() {
+  if (STATIC) { sb = { state: "demo" }; updateStatus(); return sb; }
   try { sb = await api("sandbox"); } catch { sb = { state: "unknown" }; }
   updateStatus();
   if (mode === "win" && sb.state === "ready" && !win.connected && !win.connecting) connectSandbox();
@@ -348,6 +357,8 @@ function updateStatus() {
   if (mode === "browser") {
     cls = vm.loggedIn ? "running" : "booting";
     text = vm.loggedIn ? "Mini-Linux läuft · du bist root" : "Mini-Linux startet …";
+  } else if (STATIC) {
+    text = "Online-Demo · nur Mini-Linux";
   } else if (mode === "win") {
     if (win.connected) { cls = "running"; text = "Windows-Sandbox · PowerShell 5.1"; }
     else {
@@ -374,7 +385,8 @@ function updateStatus() {
 }
 
 async function refreshEnv() {
-  try { env = await api("env"); } catch { env = null; }
+  if (STATIC) { env = null; updateStatus(); return null; }
+  try { env = await api("env"); if (env.error) env = null; } catch { env = null; }
   if (env?.multipass?.installed && env?.hyperv?.running !== false) markEvent("env-ready");
   if (env?.vm) markEvent("vm-created");
   updateStatus();
@@ -405,7 +417,11 @@ function setMode(m) {
     if (!vm.scroll) bootBanner();
   } else {
     const R = remote();
-    if (R.connected) term.write(replayable(R.scroll));
+    if (STATIC) {
+      term.writeln(`\x1b[36m${{ ssh: "Echte VM (Ubuntu)", ps: "PowerShell 7", win: "Windows-Sandbox" }[m]}\x1b[0m – in der Online-Demo nicht verfügbar.`);
+      term.writeln("Dafür brauchst du die installierte Version mit Übungs-VM: \x1b[4m" + REPO_URL + "\x1b[0m");
+      term.writeln("\x1b[90mIm Browser funktionieren: 🖥 Mini-Linux, Training, 🏴 Wargame und 🎓 Prüfung.\x1b[0m");
+    } else if (R.connected) term.write(replayable(R.scroll));
     else if (m === "win") {
       winBanner();
       refreshSandbox().then((st) => {
@@ -526,6 +542,11 @@ function renderVmCenter() {
         ${v.state === "Running" ? `<button data-vm="connect" class="primary">🔌 Verbinden</button><button data-vm="suspend">☕ Pause</button><button data-vm="stop">🌙 Herunterfahren</button>`
           : `<button data-vm="start" class="primary">▶ ${v.state === "Suspended" ? "Fortsetzen" : "Starten"}</button>`}
       </div>`;
+    h += env.snapshots.some((s) => s.name === "frisch")
+      ? `<div class="reset-row"><div><b>VM verbastelt?</b><br><span class="muted small">Setzt die VM auf den Zustand direkt nach der Erstellung zurück (Snapshot „frisch“). Dein Lernfortschritt in der App bleibt.</span></div>
+         <button data-vm="reset-fresh" class="danger">⟲ Auf Werkszustand</button></div>`
+      : `<div class="reset-row"><div><b>Werkszustand sichern</b><br><span class="muted small">Es gibt noch keinen Snapshot „frisch“. Lege ihn jetzt an, dann kannst du die VM später mit einem Klick zurücksetzen.</span></div>
+         <button data-vm="save-fresh">📸 Als „frisch“ sichern</button></div>`;
   }
   h += `</section>`;
 
@@ -549,7 +570,8 @@ function renderVmCenter() {
     <button data-vm="delete" class="danger">🗑 VM löschen</button>` : ""}</section>`;
 
   h += `<section><h4>Andere Maschine (Proxmox, Server, …)</h4>
-    <button data-vm="manual">Per IP + Passwort verbinden …</button></section>`;
+    <button data-vm="manual">Per IP + Passwort verbinden …</button></section>
+    <section><h4>Hilfe</h4><button data-vm="check">🩺 Systemcheck: Was ist eingerichtet, was fehlt?</button></section>`;
   box.innerHTML = h;
   $("#idle-min").addEventListener("change", (e) => { settings.idleMin = +e.target.value; saveSettings(); toast(settings.idleMin ? `Auto-Pause nach ${settings.idleMin} Min.` : "Auto-Pause aus"); });
 }
@@ -580,6 +602,11 @@ $("#vm-body").addEventListener("click", async (e) => {
     if (!confirm(`VM auf „${b.dataset.name}“ zurücksetzen?\nAlles, was du seitdem geändert hast, ist danach weg.`)) return;
     disconnectAll();
     startJob("vm/restore", { name: b.dataset.name }, { after: (ok) => ok && isRemote() && connectManaged({ quiet: true }) });
+  } else if (a === "reset-fresh") {
+    resetVmFresh();
+  } else if (a === "save-fresh") {
+    disconnectAll();
+    startJob("vm/snapshot", { name: "frisch", comment: "Werkszustand (" + new Date().toLocaleDateString("de-DE") + ")" }, { after: (ok) => ok && isRemote() && connectManaged({ quiet: true }) });
   } else if (a === "delsnap") {
     if (!confirm(`Snapshot „${b.dataset.name}“ löschen?`)) return;
     startJob("vm/deleteSnapshot", { name: b.dataset.name });
@@ -590,8 +617,26 @@ $("#vm-body").addEventListener("click", async (e) => {
     startJob("vm/delete");
   } else if (a === "manual") {
     $("#vm-dialog").close(); openSshDialog();
+  } else if (a === "check") {
+    $("#vm-dialog").close(); openCheck();
   }
 });
+
+/* Ein-Klick-Reset: VM auf den Snapshot „frisch“ zurücksetzen */
+async function resetVmFresh() {
+  if (!env?.snapshots?.some((s) => s.name === "frisch")) { toast("Es gibt keinen Snapshot „frisch“ – lege ihn in der VM-Zentrale an."); openVmCenter(); return; }
+  if (!confirm("VM auf den Werkszustand („frisch“) zurücksetzen?\n\nAlles, was du in der VM installiert, angelegt oder geändert hast, ist danach weg. Dein Lernfortschritt in rootshell bleibt erhalten.")) return;
+  disconnectAll();
+  if (!$("#vm-dialog").open) openVmCenter();
+  const ok = await startJob("vm/restore", { name: "frisch" }, { after: (ok) => ok && isRemote() && connectManaged({ quiet: true }) });
+  if (ok) {
+    // gestartete Missionen gelten nach dem Reset als nicht mehr vorbereitet
+    Object.values(missionState.m).forEach((s) => { s.started = false; });
+    saveMissions(); missionMsg = null;
+    toast("⟲ VM ist wieder im Werkszustand.");
+    if (settings.tab === "missions") renderMissions();
+  }
+}
 
 /* ---------- Pause / Fortsetzen / Feierabend ---------- */
 async function doPause(auto) {
@@ -685,12 +730,16 @@ $("#btn-reset").addEventListener("click", async () => {
 /* TUTOR: Tabs                                                           */
 /* ===================================================================== */
 function renderTutor() {
+  if (settings.tab === "wargame" && settings.track === "windows") settings.tab = "lessons";   // Wargame gibt's nur im Linux-Kurs
   $$(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === settings.tab));
   $$(".tabpane").forEach((p) => (p.hidden = p.dataset.pane !== settings.tab));
   if (settings.tab === "lessons") renderLesson();
   else if (settings.tab === "train") renderTraining();
+  else if (settings.tab === "wargame") renderWargame();
+  else if (settings.tab === "exam") renderExam();
   else renderMissions();
 }
+const TABS = ["lessons", "train", "missions", "wargame", "exam"];
 $$(".tabs button").forEach((b) => b.addEventListener("click", () => { settings.tab = b.dataset.tab; saveSettings(); renderTutor(); }));
 
 const subIP = (html) => html.replace(/\{\{IP\}\}/g, vmIP() || "IP-DEINER-VM");
@@ -699,7 +748,7 @@ const subIP = (html) => html.replace(/\{\{IP\}\}/g, vmIP() || "IP-DEINER-VM");
 const GROUPS = { browser: "Teil 1 · Grundlagen im Mini-Linux", ssh: "Teil 2 · Echte VM – Installationen & Dienste (FISI)", self: "Teil 3 · Selbst hosten",
   ps: "Teil 1 · PowerShell-Grundlagen", "ps-admin": "Teil 2 · Windows-Verwaltung", win: "Teil 3 · Echtes Windows (Sandbox)",
   script: "Teil 4 · Skripte schreiben (Bash)", "ps-script": "Teil 4 · Skripte schreiben (PowerShell)",
-  sec: "Teil 5 · IT-Security (Blue Team)" };
+  sec: "Teil 5 · IT-Security (Blue Team)", net: "Teil 6 · Netzwerk für FISI", devops: "Teil 7 · Git & Docker" };
 const trackOf = (l) => (l.mode === "ps" || l.mode === "win" ? "windows" : "linux");
 const trackIdx = () => LESSONS.map((l, i) => i).filter((i) => trackOf(LESSONS[i]) === (settings.track || "linux"));
 function renderNav() {
@@ -729,7 +778,9 @@ function renderLesson(scrollToActive = false) {
   const active = lesson.steps.findIndex((_, i) => !done.has(i));
   const lmode = lesson.mode || "browser";
   let html = `<h2>${lesson.title}</h2>`;
-  if (lmode !== mode) {
+  if (STATIC && lmode !== "browser") {
+    html += `<div class="box warn">📖 Diese Lektion kannst du hier lesen. Zum Mitmachen brauchst du ${lmode === "win" ? "die Windows-Sandbox" : "die Übungs-VM"}. ${DEMO_MSG}</div>`;
+  } else if (lmode !== mode) {
     html += lmode === "win"
       ? (mode === "win" ? "" : `<div class="box warn">Diese Lektion läuft in der <b>Windows-Sandbox</b> – einem echten Windows. <button data-mode="win">🪟 Zur Windows-Sandbox</button></div>`)
       : lmode === "ps"
@@ -842,6 +893,7 @@ $(".tutor").addEventListener("click", async (e) => {
   if (md && !md.closest(".mode-switch")) { setMode(md.dataset.mode); return; }
   const act = e.target.closest("[data-action]");
   if (act?.dataset.action === "vm-center") { openVmCenter(); return; }
+  if (act?.dataset.action === "vm-reset") { resetVmFresh(); return; }
   if (act?.dataset.action === "sb-start") { if (mode !== "win") setMode("win"); startSandbox(); return; }
   const sk = e.target.closest("[data-skip]");
   if (sk) markDone(progress.lesson, +sk.dataset.skip, false);
@@ -989,13 +1041,17 @@ function renderMissions() {
   const managed = onSb ? sb.state === "ready" : vmState() === "Running";
   let h = `<h2>🎯 Missionen</h2>
     <p class="intro">Echte Störfälle wie im Admin-Alltag. Die App baut den Fehler <b>unbemerkt</b> ein – du findest heraus, was los ist, und reparierst es. Ohne Schritt-für-Schritt-Anleitung.${settings.track === "windows" ? " Missionen mit 🪟 laufen in der Windows-Sandbox." : ""}</p>`;
-  if (currentMission && !managed) h += onSb
+  if (STATIC) h += `<div class="box warn">Missionen laufen auf deiner eigenen Übungs-VM. ${DEMO_MSG}</div>`;
+  else if (currentMission && !managed) h += onSb
     ? `<div class="box warn">Diese Mission läuft in der Windows-Sandbox – die muss laufen. <button data-action="sb-start">▶ Sandbox starten</button></div>`
     : `<div class="box warn">Diese Mission läuft auf der Übungs-VM – die muss laufen. <button data-action="vm-center">⚙ VM-Zentrale</button></div>`;
   else if (currentMission && mode !== want) h += `<div class="box warn">Wechsle ins passende Terminal. <button data-mode="${want}">${{ ps: "⚡ Zu PowerShell 7", win: "🪟 Zur Windows-Sandbox", ssh: "🔌 Zur echten VM" }[want]}</button></div>`;
   if (!currentMission) {
     const solved = trackMissions().filter((x) => mState(x.id).solved).length;
-    h += `<p class="muted small">${solved} von ${trackMissions().length} gelöst · Tipp: Vor einer Mission einen Snapshot anlegen.</p><ul class="mlist">`;
+    h += `<p class="muted small">${solved} von ${trackMissions().length} gelöst · Tipp: Vor einer Mission einen Snapshot anlegen.</p>`;
+    if (!STATIC && settings.track !== "windows" && env?.snapshots?.some((s) => s.name === "frisch"))
+      h += `<p class="muted small">VM verbastelt? <button class="ghost small" data-action="vm-reset">⟲ VM auf Werkszustand zurücksetzen</button></p>`;
+    h += `<ul class="mlist">`;
     for (const mi of trackMissions()) {
       const s = mState(mi.id), open = missionUnlocked(mi);
       h += `<li class="${s.solved ? "solved" : ""} ${open ? "" : "locked"}" data-mission="${mi.id}">
@@ -1058,6 +1114,395 @@ $("#missions").addEventListener("click", async (e) => {
   } else if (a === "hint") { s.hints++; saveMissions(); renderMissions(); }
 });
 
+/* ===================================================================== */
+/* WARGAME – Flaggenjagd im Mini-Linux (läuft auch in der Online-Demo)    */
+/* ===================================================================== */
+let wg = load(KEYS.wargame, { solved: {}, flags: {}, cur: null });
+let wgMsg = null;
+const saveWg = () => save(KEYS.wargame, wg);
+const WG_WORDS = ["pinguin", "kernel", "daemon", "socket", "inode", "pipe", "shell", "cron", "grep", "sudo", "tux", "bash"];
+function genFlag() {
+  const b = new Uint8Array(4); crypto.getRandomValues(b);
+  return `FLAG{${WG_WORDS[b[0] % WG_WORDS.length]}-${[...b.slice(1)].map((x) => x.toString(16).padStart(2, "0")).join("")}}`;
+}
+/* Skript unsichtbar im Mini-Linux ausführen (base64, damit das Flag nicht im Klartext durchs Terminal läuft) */
+function vmRunHidden(script) {
+  const b64 = btoa(unescape(encodeURIComponent(script)));
+  vm.send(` echo ${b64} | base64 -d | sh >/dev/null 2>&1; clear\n`);
+  setTimeout(() => { if (mode === "browser") term.clear(); vm.scroll = ""; }, 1500);
+}
+const wgUnlocked = (i) => i === 0 || !!wg.solved[WARGAME[i - 1].id];
+function renderWargame() {
+  const el = $("#wargame");
+  const n = WARGAME.filter((l) => wg.solved[l.id]).length;
+  let h = `<h2>🏴 Wargame <small class="muted">Flaggenjagd</small></h2>
+    <p class="intro">Jedes Level versteckt im <b>Mini-Linux</b> ein Flag der Form <code>FLAG{…}</code>. Finde es mit Shell-Werkzeugen und gib es hier ein. Es gibt keine Anleitung, nur einen Auftrag, wie beim bekannten „Bandit“ von OverTheWire.</p>
+    <div class="progress"><div style="width:${(100 * n) / WARGAME.length}%"></div></div>
+    <p class="muted small">${n} von ${WARGAME.length} Flaggen gefunden${n === WARGAME.length ? " – alle! 🏆" : ""}</p>`;
+  const i = WARGAME.findIndex((l) => l.id === wg.cur);
+  if (i < 0) {
+    h += `<ul class="mlist">`;
+    WARGAME.forEach((l, k) => {
+      const open = wgUnlocked(k), done = wg.solved[l.id];
+      h += `<li class="${done ? "solved" : ""} ${open ? "" : "locked"}" data-wg="${l.id}">
+        <span class="badge ${k >= 10 ? "l3" : k >= 5 ? "l2" : ""}">L${k + 1}</span>
+        <span class="mtitle">${done ? "✅ " : open ? "" : "🔒 "}${l.title}</span><small class="muted">${escapeHtml(l.tools)}</small></li>`;
+    });
+    h += `</ul>`;
+  } else {
+    const l = WARGAME[i], flag = wg.flags[l.id], done = wg.solved[l.id];
+    h += `<button class="ghost" data-wga="back">← alle Level</button>
+      <div class="mission"><h3><span class="badge ${i >= 10 ? "l3" : i >= 5 ? "l2" : ""}">L${i + 1}</span> ${l.title} ${done ? "✅" : ""}</h3>
+      <div class="story">${l.task}</div>
+      <p class="muted small">Werkzeuge: ${escapeHtml(l.tools)}</p>`;
+    if (mode !== "browser") h += `<div class="box warn">Das Wargame läuft im Mini-Linux. <button data-mode="browser">🖥 Zum Mini-Linux</button></div>`;
+    else if (!vm.loggedIn) h += `<div class="box tip">⏳ Das Mini-Linux startet noch …</div>`;
+    h += `<div class="btnrow"><button class="${flag ? "" : "primary"}" data-wga="setup" ${mode === "browser" && vm.loggedIn ? "" : "disabled"}>${flag ? "↺ Level neu vorbereiten" : "▶ Level vorbereiten"}</button></div>`;
+    if (flag) h += `<p class="muted small">Vorbereitet. Hast du das Mini-Linux neu gestartet, bereite das Level neu vor – dann gibt es ein neues Flag.</p>
+      <form class="flag-form" data-wgform><input id="wg-flag" placeholder="FLAG{…}" autocomplete="off" spellcheck="false" ${done ? `value="${escapeHtml(flag)}"` : ""}><button class="primary">🏴 Prüfen</button></form>`;
+    if (wgMsg) h += `<div class="box ${wgMsg.ok ? "info" : "warn"}">${wgMsg.text}</div>`;
+    h += `<details class="hint"><summary>Tipp anzeigen</summary>${l.hint}</details>`;
+    if (done && i + 1 < WARGAME.length) h += `<div class="btnrow"><button class="primary" data-wg="${WARGAME[i + 1].id}">Weiter zu Level ${i + 2} →</button></div>`;
+    h += `</div>`;
+  }
+  el.innerHTML = h;
+}
+$("#wargame").addEventListener("click", (e) => {
+  const li = e.target.closest("[data-wg]");
+  if (li) {
+    const k = WARGAME.findIndex((l) => l.id === li.dataset.wg);
+    if (!wgUnlocked(k)) { toast("Erst das vorige Level lösen."); return; }
+    wg.cur = li.dataset.wg; wgMsg = null; saveWg(); renderWargame(); return;
+  }
+  const a = e.target.closest("[data-wga]")?.dataset.wga;
+  if (a === "back") { wg.cur = null; wgMsg = null; saveWg(); renderWargame(); }
+  else if (a === "setup") {
+    const l = WARGAME.find((x) => x.id === wg.cur);
+    const flag = genFlag();
+    wg.flags[l.id] = flag; saveWg();
+    vmRunHidden(l.setup(flag));
+    wgMsg = { ok: true, text: "Level vorbereitet – leg los! Tipp die Befehle links ins Terminal." };
+    renderWargame(); setTimeout(() => term.focus(), 1600);
+  }
+});
+$("#wargame").addEventListener("submit", (e) => {
+  if (!e.target.closest("[data-wgform]")) return;
+  e.preventDefault();
+  const l = WARGAME.find((x) => x.id === wg.cur);
+  const got = $("#wg-flag").value.trim();
+  if (got && got === wg.flags[l.id]) {
+    if (!wg.solved[l.id]) { wg.solved[l.id] = Date.now(); saveWg(); toast("🏴 Flagge erobert!"); }
+    wgMsg = { ok: true, text: "✅ Richtig! " + (WARGAME.indexOf(l) + 1 === WARGAME.length ? "Das war der Endgegner – alle Flaggen gefunden! 🏆" : "Das nächste Level ist freigeschaltet.") };
+  } else {
+    wgMsg = { ok: false, text: /^FLAG\{.+\}$/.test(got) ? "❌ Das ist nicht das richtige Flag. Vorsicht vor Attrappen!" : "❌ Ein Flag sieht so aus: <code>FLAG{wort-1a2b3c}</code> – mit geschweiften Klammern." };
+  }
+  renderWargame();
+});
+
+/* ===================================================================== */
+/* PRÜFUNG – Simulation im IHK-Stil, Themen üben, Subnetting-Trainer      */
+/* ===================================================================== */
+let examState = load(KEYS.exam, { history: [], sub: { ok: 0, n: 0 } });
+const saveExam = () => save(KEYS.exam, examState);
+let exam = null;   // { kind: "exam" | "topic" | "sub", items, i, answers, checked, end, done }
+const EXAM_MC = 20, EXAM_SUB = 6, EXAM_MIN = 30;
+const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+const shuffle = (a) => { a = [...a]; for (let i = a.length - 1; i > 0; i--) { const j = rnd(0, i); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const ip2s = (n) => [24, 16, 8, 0].map((s) => (n >>> s) & 255).join(".");
+const normAns = (s) => String(s || "").trim().replace(/\s+/g, "").replace(/^\//, "").replace(/,/g, ".");
+
+/* Eine zufällige Subnetting-Aufgabe mit Lösungsweg */
+function subnetTask() {
+  const p = rnd(17, 30);
+  const o = [[10, rnd(0, 255), rnd(0, 255), rnd(1, 254)], [172, rnd(16, 31), rnd(0, 255), rnd(1, 254)], [192, 168, rnd(0, 255), rnd(1, 254)]][rnd(0, 2)];
+  const ip = ((o[0] << 24) | (o[1] << 16) | (o[2] << 8) | o[3]) >>> 0;
+  const mask = (0xffffffff << (32 - p)) >>> 0;
+  const net = (ip & mask) >>> 0, bc = (net | ~mask) >>> 0;
+  const hb = 32 - p, size = 2 ** hb, hosts = size - 2, cidr = `${ip2s(ip)}/${p}`;
+  const oc = Math.floor(p / 8), block = 2 ** (8 - (p % 8));
+  const way = `Host-Bits: 32 − ${p} = <b>${hb}</b> → 2<sup>${hb}</sup> = ${size} Adressen, davon ${hosts} nutzbar. ` +
+    (p % 8 ? `Die Netzgrenze liegt im ${oc + 1}. Oktett, die Blockgröße dort ist 2<sup>${8 - (p % 8)}</sup> = <b>${block}</b>: ${o[oc]} liegt im Block ab ${Math.floor(o[oc] / block) * block}. ` : `Das Präfix endet genau an einer Oktettgrenze. `) +
+    `Netz <code>${ip2s(net)}</code> · erste <code>${ip2s(net + 1)}</code> · letzte <code>${ip2s(bc - 1)}</code> · Broadcast <code>${ip2s(bc)}</code> · Maske <code>${ip2s(mask)}</code>.`;
+  const need = rnd(2 ** (hb - 1) - 1, hosts);
+  const kinds = [
+    { q: `Wie viele <b>nutzbare Hostadressen</b> hat ein Netz mit dem Präfix <code>/${p}</code>?`, a: String(hosts) },
+    { q: `Wie lautet die <b>Netzadresse</b> von <code>${cidr}</code>?`, a: ip2s(net) },
+    { q: `Wie lautet die <b>Broadcastadresse</b> von <code>${cidr}</code>?`, a: ip2s(bc) },
+    { q: `Wie lautet die <b>Subnetzmaske</b> in Punktschreibweise zu <code>/${p}</code>?`, a: ip2s(mask) },
+    { q: `Wie lautet die <b>erste nutzbare</b> Hostadresse in <code>${cidr}</code>?`, a: ip2s(net + 1) },
+    { q: `Wie lautet die <b>letzte nutzbare</b> Hostadresse in <code>${cidr}</code>?`, a: ip2s(bc - 1) },
+    { q: `Ein Subnetz soll <b>${need} Geräte</b> aufnehmen und dabei so klein wie möglich sein. Welches Präfix brauchst du? (z. B. /26)`, a: "/" + p,
+      e: `Gesucht ist das kleinste h mit 2<sup>h</sup> − 2 ≥ ${need} → h = <b>${hb}</b> (2<sup>${hb}</sup> − 2 = ${hosts}${hb > 2 ? `, mit ${hb - 1} Bit wären es nur ${2 ** (hb - 1) - 2}` : ""}). Präfix = 32 − ${hb} = <b>/${p}</b>.` },
+  ];
+  const k = kinds[rnd(0, kinds.length - 1)];
+  return { type: "sub", topic: "Subnetting", q: k.q, a: k.a, e: k.e || way };
+}
+const quizPool = () => QUIZ.filter((q) => q.track === "all" || q.track === (settings.track || "linux"));
+function mcItem(q) {
+  const order = shuffle(q.o.map((_, i) => i));
+  return { type: "mc", id: q.id, topic: q.topic, q: q.q, o: order.map((i) => q.o[i]), a: order.indexOf(q.a), e: q.e };
+}
+const isRight = (it, ans) => (it.type === "mc" ? ans === it.a : ans != null && normAns(ans) === normAns(it.a));
+function ihkGrade(p) {
+  return p >= 92 ? [1, "sehr gut"] : p >= 81 ? [2, "gut"] : p >= 67 ? [3, "befriedigend"] : p >= 50 ? [4, "ausreichend"] : p >= 30 ? [5, "mangelhaft"] : [6, "ungenügend"];
+}
+const fmtTime = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+const ansText = (it, ans) => (ans == null || ans === "" ? "<i>keine Antwort</i>" : it.type === "mc" ? escapeHtml(it.o[ans]) : escapeHtml(ans));
+
+function startExam(kind, topic) {
+  if (kind === "exam") {
+    const mc = shuffle(quizPool()).slice(0, EXAM_MC).map(mcItem);
+    exam = { kind, items: shuffle([...mc, ...Array.from({ length: EXAM_SUB }, subnetTask)]), i: 0, answers: {}, checked: {}, end: Date.now() + EXAM_MIN * 60000 };
+  } else if (kind === "topic") {
+    exam = { kind, topic, items: shuffle(quizPool().filter((q) => q.topic === topic)).slice(0, 10).map(mcItem), i: 0, answers: {}, checked: {} };
+  } else exam = { kind: "sub", items: [subnetTask()], i: 0, answers: {}, checked: {} };
+  renderExam();
+}
+function finishExam(timeout) {
+  if (!exam || exam.done) return;
+  exam.done = true;
+  const right = exam.items.filter((it, i) => isRight(it, exam.answers[i])).length;
+  exam.pct = Math.round((100 * right) / exam.items.length);
+  if (exam.kind === "exam") {
+    examState.history.unshift({ at: Date.now(), pct: exam.pct, grade: ihkGrade(exam.pct)[0], n: exam.items.length, track: settings.track || "linux" });
+    examState.history = examState.history.slice(0, 10); saveExam();
+    if (timeout) toast("⏰ Zeit abgelaufen – die Prüfung wurde abgegeben.");
+  }
+  renderExam();
+}
+setInterval(() => {
+  if (exam?.kind !== "exam" || exam.done) return;
+  const left = exam.end - Date.now();
+  if (left <= 0) { if (settings.tab !== "exam") { settings.tab = "exam"; saveSettings(); renderTutor(); } finishExam(true); return; }
+  const t = $("#exam-timer"); if (t) { t.textContent = fmtTime(left); t.classList.toggle("low", left < 5 * 60000); }
+}, 1000);
+
+function renderExam() {
+  const el = $("#exam");
+  let h = `<h2>🎓 Prüfung</h2>`;
+  if (!exam) {
+    const topics = [...new Set(quizPool().map((q) => q.topic))];
+    const best = examState.history.filter((x) => x.track === (settings.track || "linux")).sort((a, b) => b.pct - a.pct)[0];
+    h += `<p class="intro">Fragen im Stil der IHK-Abschlussprüfung (AP1/AP2) für Fachinformatiker Systemintegration – ${settings.track === "windows" ? "Windows-Kurs" : "Linux-Kurs"} plus allgemeine Themen.</p>
+      <div class="card"><div class="card-head"><b>📝 Prüfungssimulation</b>${best ? `<span class="badge">Bestwert ${best.pct} % · Note ${best.grade}</span>` : ""}</div>
+        <p class="muted">${EXAM_MC + EXAM_SUB} Aufgaben (davon ${EXAM_SUB} Subnetting) · ${EXAM_MIN} Minuten · keine Tipps, keine Lösungen bis zur Abgabe · Note nach IHK-Schlüssel.</p>
+        <div class="btnrow"><button class="primary" data-exam="start">▶ Prüfung starten</button></div></div>
+      <div class="card"><div class="card-head"><b>🧮 Subnetting-Trainer</b><span class="muted small">${examState.sub.n ? `${examState.sub.ok} von ${examState.sub.n} richtig` : ""}</span></div>
+        <p class="muted">Endlos neue Aufgaben: Hosts, Netz, Broadcast, Maske, Präfix. Nach jeder Antwort siehst du den Lösungsweg.</p>
+        <div class="btnrow"><button data-exam="sub">▶ Trainieren</button></div></div>
+      <div class="card"><div class="card-head"><b>📚 Themen üben</b></div>
+        <p class="muted">10 Fragen zu einem Thema, mit Erklärung direkt nach jeder Antwort.</p>
+        <div class="btnrow">${topics.map((t) => `<button data-exam="topic" data-topic="${escapeHtml(t)}">${escapeHtml(t)}</button>`).join("")}</div></div>`;
+    if (examState.history.length) {
+      h += `<h3>Letzte Prüfungen</h3><table class="vminfo">${examState.history.map((x) => `<tr><td>${new Date(x.at).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</td><td>${x.track === "windows" ? "🪟" : "🐧"} ${x.pct} %</td><td><b>Note ${x.grade}</b> (${ihkGrade(x.pct)[1]})</td></tr>`).join("")}</table>`;
+    }
+    el.innerHTML = h; return;
+  }
+  const E = exam;
+  if (E.kind === "exam" && E.done) {
+    const [g, gt] = ihkGrade(E.pct);
+    const byTopic = {};
+    E.items.forEach((it, i) => { const t = (byTopic[it.topic] ||= { ok: 0, n: 0 }); t.n++; if (isRight(it, E.answers[i])) t.ok++; });
+    h += `<div class="exam-result g${g}"><div class="grade">${g}</div><div><b>${gt}</b><br>${E.pct} % · ${E.items.filter((it, i) => isRight(it, E.answers[i])).length} von ${E.items.length} richtig</div></div>
+      <table class="vminfo">${Object.entries(byTopic).map(([t, v]) => `<tr><td>${escapeHtml(t)}</td><td>${v.ok} / ${v.n}</td><td><div class="progress mini"><div style="width:${(100 * v.ok) / v.n}%"></div></div></td></tr>`).join("")}</table>
+      <p class="muted small">IHK-Schlüssel: ab 92 % = 1 · ab 81 % = 2 · ab 67 % = 3 · ab 50 % = 4 (bestanden) · ab 30 % = 5.</p>
+      <div class="btnrow"><button class="primary" data-exam="start">↺ Neue Prüfung</button><button data-exam="home">← Übersicht</button></div>
+      <h3>Auswertung</h3>`;
+    E.items.forEach((it, i) => {
+      const ok = isRight(it, E.answers[i]);
+      h += `<div class="review ${ok ? "ok" : "bad"}"><div>${ok ? "✅" : "❌"} <b>${i + 1}.</b> ${it.q}</div>
+        ${ok ? "" : `<div class="small">Deine Antwort: ${ansText(it, E.answers[i])}<br>Richtig: <b>${it.type === "mc" ? escapeHtml(it.o[it.a]) : escapeHtml(it.a)}</b></div>`}
+        <details class="hint"${ok ? "" : " open"}><summary>Erklärung</summary>${it.e}</details></div>`;
+    });
+    el.innerHTML = h; return;
+  }
+  const it = E.items[E.i], ans = E.answers[E.i], checked = E.checked[E.i];
+  const immediate = E.kind !== "exam";
+  h += `<div class="exam-head">
+    <span>${E.kind === "exam" ? `Aufgabe ${E.i + 1} / ${E.items.length}` : E.kind === "sub" ? `🧮 Subnetting · ${examState.sub.ok} / ${examState.sub.n} richtig` : `📚 ${escapeHtml(E.topic)} · ${E.i + 1} / ${E.items.length}`}</span>
+    ${E.kind === "exam" ? `<span id="exam-timer" class="exam-timer">${fmtTime(E.end - Date.now())}</span>` : `<button class="ghost" data-exam="home">✕ Beenden</button>`}</div>`;
+  if (E.kind === "exam") h += `<div class="exam-map">${E.items.map((x, i) => `<button data-exam="goto" data-i="${i}" class="${i === E.i ? "cur" : ""} ${E.answers[i] != null && E.answers[i] !== "" ? "done" : ""}">${i + 1}</button>`).join("")}</div>`;
+  h += `<div class="card"><div class="card-head"><span class="badge">${escapeHtml(it.topic)}</span></div><div class="q">${it.q}</div>`;
+  if (it.type === "mc") {
+    h += `<div class="mc">${it.o.map((o, k) => {
+      const cls = checked ? (k === it.a ? "right" : k === ans ? "wrong" : "") : k === ans ? "sel" : "";
+      return `<button data-exam="pick" data-k="${k}" class="${cls}" ${checked ? "disabled" : ""}>${String.fromCharCode(65 + k)}) ${escapeHtml(o)}</button>`;
+    }).join("")}</div>`;
+  } else {
+    h += `<form class="flag-form" data-examform><input id="exam-input" placeholder="Antwort" autocomplete="off" spellcheck="false" value="${escapeHtml(ans || "")}" ${checked ? "disabled" : ""}>${immediate && !checked ? `<button class="primary">Prüfen</button>` : ""}</form>`;
+  }
+  if (checked) {
+    const ok = isRight(it, ans);
+    h += `<div class="box ${ok ? "info" : "warn"}">${ok ? "✅ Richtig!" : `❌ Richtig wäre: <b>${it.type === "mc" ? escapeHtml(it.o[it.a]) : escapeHtml(it.a)}</b>`}<br><span class="small">${it.e}</span></div>`;
+  }
+  h += `</div><div class="btnrow">`;
+  if (E.kind === "exam") {
+    h += `<button data-exam="prev" ${E.i ? "" : "disabled"}>← Zurück</button><button data-exam="next" ${E.i < E.items.length - 1 ? "" : "disabled"}>Weiter →</button>
+      <button class="primary" data-exam="submit" style="margin-left:auto">✓ Abgeben</button>`;
+  } else if (checked) {
+    h += E.kind === "sub" || E.i < E.items.length - 1 ? `<button class="primary" data-exam="next">Nächste Aufgabe →</button>` : `<button class="primary" data-exam="submit">Auswertung →</button>`;
+  }
+  h += `</div>`;
+  el.innerHTML = h;
+  if (it.type === "sub" && !checked) $("#exam-input")?.focus();
+}
+function examCheckCurrent() {
+  const E = exam; if (!E || E.kind === "exam" || E.checked[E.i]) return;
+  E.checked[E.i] = true;
+  if (E.kind === "sub") { examState.sub.n++; if (isRight(E.items[E.i], E.answers[E.i])) examState.sub.ok++; saveExam(); }
+  renderExam();
+}
+$("#exam").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-exam]"); if (!b) return;
+  const a = b.dataset.exam;
+  if (a === "start") {
+    if (exam?.kind === "exam" && !exam.done && !confirm("Die laufende Prüfung abbrechen und neu starten?")) return;
+    startExam("exam");
+  } else if (a === "sub") startExam("sub");
+  else if (a === "topic") startExam("topic", b.dataset.topic);
+  else if (a === "home") {
+    if (exam?.kind === "exam" && !exam.done && !confirm("Prüfung abbrechen? Sie wird nicht gewertet.")) return;
+    exam = null; renderExam();
+  } else if (!exam) return;
+  else if (a === "pick") { exam.answers[exam.i] = +b.dataset.k; if (exam.kind === "exam") renderExam(); else examCheckCurrent(); }
+  else if (a === "goto") { exam.i = +b.dataset.i; renderExam(); }
+  else if (a === "prev") { exam.i--; renderExam(); }
+  else if (a === "next") {
+    if (exam.kind === "sub") { exam.items.push(subnetTask()); }
+    exam.i++; renderExam();
+  } else if (a === "submit") {
+    if (exam.kind === "exam") {
+      const open = exam.items.length - Object.values(exam.answers).filter((v) => v != null && v !== "").length;
+      if (open && !confirm(`Noch ${open} Aufgabe(n) unbeantwortet. Trotzdem abgeben?`)) return;
+      finishExam();
+    } else { exam.kind = "exam"; exam.done = false; finishExamPractice(); }
+  }
+});
+/* Themen-Übung: kurze Auswertung ohne Note in der Historie */
+function finishExamPractice() {
+  const right = exam.items.filter((it, i) => isRight(it, exam.answers[i])).length;
+  exam.pct = Math.round((100 * right) / exam.items.length); exam.done = true;
+  renderExam();
+}
+$("#exam").addEventListener("input", (e) => { if (e.target.id === "exam-input" && exam) exam.answers[exam.i] = e.target.value; });
+$("#exam").addEventListener("submit", (e) => {
+  if (!e.target.closest("[data-examform]")) return;
+  e.preventDefault();
+  if (!exam) return;
+  exam.answers[exam.i] = $("#exam-input").value;
+  if (exam.kind === "exam") { if (exam.i < exam.items.length - 1) { exam.i++; renderExam(); } }
+  else examCheckCurrent();
+});
+
+/* ===================================================================== */
+/* FORTSCHRITT – Übersicht, Sicherung (Export/Import), Zurücksetzen       */
+/* ===================================================================== */
+function renderProgress() {
+  const tr = (t) => {
+    const ls = LESSONS.filter((l) => trackOf(l) === t);
+    const steps = ls.reduce((a, l) => a + l.steps.length, 0), done = ls.reduce((a, l) => a + doneSet(l.id).size, 0);
+    const full = ls.filter((l) => doneSet(l.id).size === l.steps.length).length;
+    const ms = MISSIONS.filter((x) => (x.track || "linux") === t), mSolved = ms.filter((x) => missionState.m[x.id]?.solved).length;
+    const modes = t === "windows" ? ["ps", "win"] : ["browser", "ssh"];
+    const cards = DRILLS.filter((d) => modes.includes(d.mode)), seen = cards.filter((d) => drillState.cards[d.id]).length, sure = cards.filter((d) => (drillState.cards[d.id]?.box || 0) >= 4).length;
+    const ex = examState.history.filter((x) => x.track === t), best = ex.sort((a, b) => b.pct - a.pct)[0];
+    const bar = (a, b) => `<div class="progress mini"><div style="width:${b ? (100 * a) / b : 0}%"></div></div>`;
+    return `<section><h4>${t === "windows" ? "🪟 Windows · PowerShell" : "🐧 Linux"}</h4><table class="vminfo">
+      <tr><td>Lektionen</td><td>${full} / ${ls.length} fertig · ${done} / ${steps} Schritte</td><td>${bar(done, steps)}</td></tr>
+      <tr><td>Training</td><td>${seen} / ${cards.length} Karten gesehen · ${sure} sitzen</td><td>${bar(sure, cards.length)}</td></tr>
+      <tr><td>Missionen</td><td>${mSolved} / ${ms.length} gelöst</td><td>${bar(mSolved, ms.length)}</td></tr>
+      ${t === "linux" ? `<tr><td>Wargame</td><td>${WARGAME.filter((l) => wg.solved[l.id]).length} / ${WARGAME.length} Flaggen</td><td>${bar(WARGAME.filter((l) => wg.solved[l.id]).length, WARGAME.length)}</td></tr>` : ""}
+      <tr><td>Prüfung</td><td>${best ? `Bestwert ${best.pct} % (Note ${best.grade}) · ${ex.length}× geschrieben` : "noch nicht geschrieben"}</td><td></td></tr></table></section>`;
+  };
+  $("#progress-body").innerHTML = tr("linux") + tr("windows") + `
+    <section><h4>Sicherung</h4>
+      <p class="muted small">Dein Fortschritt liegt nur in diesem Browser. Leert der Browser seinen Speicher, ist er weg. Sichere ihn als Datei, auch für den Umzug auf einen anderen PC.</p>
+      <div class="btnrow"><button data-prog="export" class="primary">⬇ Als Datei sichern</button><button data-prog="import">⬆ Aus Datei laden</button>
+      <input type="file" id="prog-file" accept=".json,application/json" hidden></div></section>
+    <section><h4>Sonstiges</h4><div class="btnrow"><button data-prog="check">🩺 Systemcheck</button><button data-prog="reset" class="danger">🗑 Fortschritt zurücksetzen</button></div></section>`;
+}
+function openProgress() { renderProgress(); $("#progress-dialog").showModal(); }
+function exportProgress() {
+  const data = {};
+  for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith("linuxlab.") && k !== KEYS.ssh) data[k] = localStorage.getItem(k); }
+  const blob = new Blob([JSON.stringify({ app: "rootshell", version: 1, exported: new Date().toISOString(), data }, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = `rootshell-fortschritt-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  toast("Fortschritt gesichert – die Datei liegt in deinen Downloads.");
+}
+async function importProgress(file) {
+  let j;
+  try { j = JSON.parse(await file.text()); } catch { toast("Die Datei ist kein gültiges JSON."); return; }
+  if (j?.app !== "rootshell" || typeof j.data !== "object") { toast("Das ist keine rootshell-Sicherung."); return; }
+  const entries = Object.entries(j.data).filter(([k, v]) => k.startsWith("linuxlab.") && k !== KEYS.ssh && typeof v === "string" && (() => { try { JSON.parse(v); return true; } catch { return false; } })());
+  if (!entries.length) { toast("In der Datei steht kein Fortschritt."); return; }
+  if (!confirm(`Sicherung vom ${new Date(j.exported).toLocaleString("de-DE")} laden?\nDein aktueller Fortschritt in diesem Browser wird dabei ersetzt.`)) return;
+  entries.forEach(([k, v]) => localStorage.setItem(k, v));
+  location.reload();
+}
+function resetProgress() {
+  if (!confirm("Wirklich den GESAMTEN Lernfortschritt löschen (Lektionen, Training, Missionen, Wargame, Prüfungen)?\nTipp: Vorher „Als Datei sichern“.")) return;
+  if (prompt('Zur Sicherheit bitte "löschen" eintippen:') !== "löschen") return;
+  Object.values(KEYS).filter((k) => k !== KEYS.ssh).forEach((k) => localStorage.removeItem(k));
+  location.reload();
+}
+$("#btn-progress").addEventListener("click", openProgress);
+$("#progress-close").addEventListener("click", () => $("#progress-dialog").close());
+$("#progress-body").addEventListener("click", (e) => {
+  const a = e.target.closest("[data-prog]")?.dataset.prog;
+  if (a === "export") exportProgress();
+  else if (a === "import") $("#prog-file").click();
+  else if (a === "reset") resetProgress();
+  else if (a === "check") { $("#progress-dialog").close(); openCheck(); }
+});
+$("#progress-body").addEventListener("change", (e) => { if (e.target.id === "prog-file" && e.target.files[0]) importProgress(e.target.files[0]); });
+
+/* ===================================================================== */
+/* SYSTEMCHECK – was ist eingerichtet, was fehlt, was geht damit          */
+/* ===================================================================== */
+function checkItems() {
+  const it = [{ ok: typeof WebAssembly === "object", name: "Browser", info: typeof WebAssembly === "object" ? "unterstützt alles" : "zu alt", fix: "Einen aktuellen Chrome, Edge oder Firefox verwenden." }];
+  if (STATIC) {
+    it.push({ ok: false, name: "Lokaler rootshell-Server", info: "Online-Demo", fix: `Für Übungs-VM, PowerShell 7 und Windows-Sandbox installierst du rootshell auf deinem PC: <a href="${REPO_URL}#installation" target="_blank" rel="noopener">Anleitung</a>.` });
+    return it;
+  }
+  it.push({ ok: !!env, name: "rootshell-Server", info: env ? "läuft" : "nicht erreichbar", fix: "<code>start.bat</code> starten und das schwarze Fenster offen lassen." });
+  if (!env) return it;
+  if (env.platform === "win32") {
+    const hv = env.hyperv || {};
+    it.push({ ok: !!hv.running, name: "Hyper-V", info: hv.running ? "aktiv" : hv.enabled ? "installiert – Neustart nötig" : "nicht aktiv",
+      fix: hv.supported ? "VM-Zentrale → „Hyper-V aktivieren“, danach Windows neu starten. Klappt es nicht: Virtualisierung (VT-x/AMD-V) im BIOS einschalten." : "Windows Home hat kein Hyper-V: VirtualBox installieren, dann <code>multipass set local.driver=virtualbox</code>." });
+    it.push({ ok: env.ramGB >= 8, opt: true, name: "Arbeitsspeicher", info: `${env.ramGB || "?"} GB`, fix: "Unter 8 GB wird es eng: die VM pausieren, wenn du sie nicht brauchst." });
+  }
+  it.push({ ok: !!env.multipass?.installed, name: "Multipass", info: env.multipass?.installed ? `Version ${env.multipass.version || "?"}` : "nicht installiert", fix: "VM-Zentrale → „Multipass installieren“ (oder von multipass.run)." });
+  it.push({ ok: !!env.vm, name: "Übungs-VM fis-lab", info: env.vm ? { Running: "läuft", Stopped: "aus", Suspended: "pausiert" }[env.vm.state] || env.vm.state : "noch nicht erstellt", fix: "VM-Zentrale → „🚀 VM erstellen“ (einmalig, ca. 5–10 Minuten)." });
+  if (env.vm) it.push({ ok: env.snapshots.some((s) => s.name === "frisch"), opt: true, name: "Werkszustand-Snapshot", info: env.snapshots.some((s) => s.name === "frisch") ? "vorhanden" : "fehlt", fix: "VM-Zentrale → „📸 Als frisch sichern“ – dann kannst du die VM jederzeit zurücksetzen." });
+  if (env.platform === "win32") it.push({ ok: ["off", "ready", "starting"].includes(sb.state), opt: true, name: "Windows-Sandbox", info: { unavailable: "nicht aktiviert", off: "bereit", ready: "läuft", starting: "startet" }[sb.state] || "unbekannt",
+    fix: "Nur Windows Pro/Enterprise: „Windows-Features aktivieren oder deaktivieren“ → „Windows-Sandbox“, dann neu starten. Nötig nur für die 🪟-Lektionen." });
+  return it;
+}
+function renderCheck() {
+  const it = checkItems();
+  const can = ["🖥 Mini-Linux, 🔁 Training, 🏴 Wargame und 🎓 Prüfung"];
+  if (env?.vm) can.push("🔌 Echte VM: Teil 2–7, alle 🎯 Linux-Missionen", "⚡ PowerShell 7 (Windows-Kurs Teil 1, 2, 4)");
+  if (["off", "ready", "starting"].includes(sb.state)) can.push("🪟 Windows-Sandbox (Windows-Kurs Teil 3)");
+  $("#check-body").innerHTML = `<ul class="checks">${it.map((x) => `<li>${x.ok ? `<span class="ok">✓</span>` : x.opt ? `<span class="opt">!</span>` : `<span class="bad">✗</span>`}
+      <b>${x.name}</b> <span class="muted">${escapeHtml(x.info)}</span>${x.ok ? "" : `<br><small>${x.fix}</small>`}</li>`).join("")}</ul>
+    <div class="box info"><b>Damit kannst du nutzen:</b><ul>${can.map((c) => `<li>${c}</li>`).join("")}</ul></div>
+    ${!STATIC && !env?.vm && env ? `<div class="btnrow"><button class="primary" data-check="vm">⚙ Zur VM-Zentrale</button></div>` : ""}`;
+}
+async function openCheck() {
+  if (!$("#check-dialog").open) $("#check-dialog").showModal();
+  $("#check-body").innerHTML = `<p class="muted">Prüfe deinen PC …</p>`;
+  if (!STATIC) await Promise.all([refreshEnv(), refreshSandbox()]);
+  renderCheck();
+}
+$("#check-close").addEventListener("click", () => $("#check-dialog").close());
+$("#check-dialog").addEventListener("close", () => { if (!settings.checked) { settings.checked = 1; saveSettings(); } });
+$("#check-body").addEventListener("click", (e) => { if (e.target.closest("[data-check='vm']")) { $("#check-dialog").close(); openVmCenter(); } });
+
 /* ---------- Toast ---------- */
 let toastTimer;
 function toast(msg) {
@@ -1093,9 +1538,19 @@ $("#track-dialog").addEventListener("click", (e) => {
   if (!b) return;
   $("#track-dialog").close();
   setTrack(b.dataset.track);
+  if (!settings.checked) setTimeout(openCheck, 400);   // beim allerersten Start: zeigen, was eingerichtet ist
 });
 
 /* ---------- Start ---------- */
+// Direktlinks, z. B. ?track=linux&tab=wargame (praktisch für die Online-Demo und Screenshots)
+const qTrack = PARAMS.get("track"), qTab = PARAMS.get("tab");
+if (qTrack === "linux" || qTrack === "windows") settings.track = qTrack;
+if (TABS.includes(qTab)) settings.tab = qTab;
+if (!TABS.includes(settings.tab)) settings.tab = "lessons";
+if (STATIC) {
+  document.body.dataset.static = "1";
+  $("#demo-badge").hidden = false;
+}
 if (progress.lessonId) { const i = LESSONS.findIndex((l) => l.id === progress.lessonId); if (i >= 0) progress.lesson = i; }
 if (!(progress.lesson < LESSONS.length) || !trackIdx().includes(progress.lesson)) progress.lesson = trackIdx()[0];
 progress.lessonId = LESSONS[progress.lesson].id;

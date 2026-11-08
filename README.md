@@ -5,10 +5,16 @@ Links eine echte Shell, rechts das Tutorial. Jeder Schritt wird automatisch abge
 
 Gebaut für Azubis und Umschüler **Fachinformatiker Systemintegration (FISI)**, aber für alle nützlich, die Admin-Handwerk üben wollen. Alle Inhalte sind auf Deutsch.
 
+**▶ Online-Demo folgt in Kürze** – Mini-Linux, Lektionen, Training, Wargame und Prüfung laufen dann direkt im Browser, ohne Installation. Für Übungs-VM, PowerShell und Windows-Sandbox installierst du rootshell lokal.
+
+![rootshell: links das Terminal, rechts die Lektion](docs/screenshots/lektion.png)
+
 | Kurs | Umgebung | Inhalt |
 |---|---|---|
-| 🐧 **Linux** | Mini-Linux im Browser (sofort, ohne Setup) + Ubuntu-VM | Shell-Grundlagen bis LEMP, DNS, DHCP, Docker, Selbst-Hosting, **Bash-Skripte schreiben**, **IT-Security (Blue Team)**, 17 Missionen |
-| 🪟 **Windows · PowerShell** | PowerShell 7 in der Ubuntu-VM + echtes Windows in der Windows-Sandbox | Pipeline, CSV/JSON, Dienste, Benutzer, NTFS, Registry, Firewall, geplante Aufgaben, **PowerShell-Skripte schreiben**, 10 Missionen |
+| 🐧 **Linux** | Mini-Linux im Browser (sofort, ohne Setup) + Ubuntu-VM | Shell-Grundlagen bis LEMP, DNS, DHCP, Docker, Selbst-Hosting, **Bash-Skripte**, **IT-Security (Blue Team)**, **Netzwerk & Subnetting**, **Git & Docker** – 54 Lektionen, 24 Missionen |
+| 🪟 **Windows · PowerShell** | PowerShell 7 in der Ubuntu-VM + echtes Windows in der Windows-Sandbox | Pipeline, CSV/JSON, Dienste, Benutzer, NTFS, Registry, Firewall, geplante Aufgaben, **PowerShell-Skripte** – 25 Lektionen, 10 Missionen |
+| 🎓 **Prüfung** | Browser | Prüfungssimulation im IHK-Stil mit Note, Themen üben, endloser Subnetting-Trainer |
+| 🏴 **Wargame** | Mini-Linux im Browser | 15 Level Flaggenjagd im Stil von OverTheWire „Bandit“ |
 
 Nichts davon verändert deinen PC: Die VM und die Sandbox sind Wegwerf-Umgebungen.
 
@@ -35,7 +41,9 @@ Das Mini-Linux im Browser (Linux Teil 1) läuft ohne VM.
 2. Im Ordner **`start.bat`** doppelklicken. Beim ersten Mal werden die Abhängigkeiten installiert (`npm install`).
 3. Die App öffnet sich im Browser unter http://localhost:8086. Das schwarze Server-Fenster offen lassen, solange du lernst.
 
-Die VM legst du in der App über **⚙ VM-Zentrale** an, die Sandbox startest du im Windows-Kurs mit **▶ Sandbox starten**. Dein Lernstand wird im Browser gespeichert.
+Beim ersten Start zeigt ein **🩺 Systemcheck**, was eingerichtet ist und was noch fehlt (Hyper-V, Multipass, VM, Windows-Sandbox) – und welche Teile du damit schon nutzen kannst. Die VM legst du über **⚙ VM-Zentrale** an, die Sandbox startest du im Windows-Kurs mit **▶ Sandbox starten**.
+
+Dein Lernstand wird im Browser gespeichert. Unter **📊 Fortschritt** siehst du ihn auf einen Blick und sicherst ihn als Datei – etwa vor dem Leeren des Browsers oder für den Umzug auf einen anderen PC.
 
 ## Zwei Umgebungen
 
@@ -78,7 +86,37 @@ Dieser Teil übt die **Verteidiger-Seite** – und zwar ausschließlich auf dein
 
 - **5 Lektionen:** Spielregeln & Recht (nur eigene Systeme, §§ 202a–c StGB) und Angriffsfläche prüfen (`ss`, `nmap localhost`); SSH härten (`sshd_config.d`, `PermitRootLogin`); Firewall & Einbruchschutz (`ufw`, `fail2ban`); Spuren in Logs lesen (`journalctl`, `last/lastb`, Brute-Force-Muster erkennen); Updates & Schwachstellen (`apt`, `unattended-upgrades`, CVE/CVSS).
 - **9 Trainingskarten** in drei Stufen.
-- **4 Incident-Response-Missionen:** ein eingeschleustes Benutzerkonto finden und entfernen, einen heimlichen Dienst auf einem unerwarteten Port abschalten, einen manipulierten Cronjob samt versteckter Datei beseitigen und den Server abriegeln (Firewall, nur SSH offen, Root-Login verboten). Das Setup läuft als root in der VM und spielt nur harmlose Artefakte ein (ein Benutzer, ein `python3 -m http.server`, ein Cron-Eintrag) – kein echter Schadcode.
+- **2 weitere Lektionen:** Backup & Wiederherstellung (`tar` mit Datum, einzelne Dateien zurückholen, Prüfsummen, 3-2-1-Regel, voll/inkrementell/differenziell) und Sicherheitsvorfall (Runbook in Markdown, Beweise mit Zeitstempel sichern, Mini-SIEM mit `journalctl | awk | uniq -c`, geänderte Dateien finden, DSGVO-Meldefrist).
+- **12 Trainingskarten** in drei Stufen.
+- **6 Incident-Response-Missionen:** ein eingeschleustes Benutzerkonto finden und entfernen, einen heimlichen Dienst auf einem unerwarteten Port abschalten, einen manipulierten Cronjob samt versteckter Datei beseitigen, den Server abriegeln (Firewall, nur SSH offen, Root-Login verboten), nach einem simulierten **Ransomware-Alarm** aus dem Backup wiederherstellen und bei einem **Brute-Force im Auth-Log** die Angreifer-IP finden und *vor* der SSH-Freigabe sperren. Das Setup läuft als root in der VM und spielt nur harmlose Artefakte ein (ein Benutzer, ein `python3 -m http.server`, ein Cron-Eintrag, umbenannte Dateien, Log-Zeilen) – kein echter Schadcode.
+- Du willst einen zweiten, eigenen Server härten und von außen prüfen? Siehe [docs/HOMELAB.md](docs/HOMELAB.md).
+
+## 🌐 Teil 6: Netzwerk für FISI
+
+Baut auf den Netzwerk-Grundlagen aus Teil 2 auf und deckt ab, was in AP1/AP2 drankommt:
+
+- **5 Lektionen:** IPv4 & Subnetting (`ipcalc`, /26 und /20 von Hand, private Bereiche, IPv6-Kurzschreibweise), Routing & Gateway (`ip route get`, ARP, `tracepath`), DNS verstehen (`dig` mit A/AAAA/MX/NS/PTR, `@server`, `/etc/hosts` vs. DNS), Ports, TCP/UDP & OSI-Modell (`nc -zv`, `curl -v`, Prüfungs-Ports) und Fehlersuche Schicht für Schicht.
+- **9 Trainingskarten** und **3 Missionen:** ein falscher `/etc/hosts`-Eintrag, den `dig` nicht zeigt; ein Dienst, der nur auf 127.0.0.1 lauscht; ein falsches Standard-Gateway (der Netzplan liegt bei).
+- Rechenaufgaben übst du im **🧮 Subnetting-Trainer** (Tab 🎓 Prüfung).
+
+## 🌿 Teil 7: Git & Docker
+
+- **4 Lektionen:** Git-Grundlagen (Staging, Commit, Diff, `restore`), Branches & Merge, `.gitignore`; eigene Docker-Images mit `Dockerfile` bauen; Volumes, Bind-Mounts und Container-Netzwerke mit Namensauflösung.
+- **9 Trainingskarten** und **2 Missionen:** einen fehlerhaften Commit mit `git revert` zurücknehmen, ohne die Geschichte umzuschreiben, und einen Container mit falscher Port-Zuordnung reparieren, der auch einen Neustart überlebt.
+
+## 🎓 Prüfung
+
+![Prüfungssimulation](docs/screenshots/pruefung.png)
+
+- **Prüfungssimulation:** 26 Aufgaben (20 Multiple Choice aus 64 Fragen + 6 Subnetting-Rechenaufgaben), 30 Minuten, keine Hilfen, Abgabe mit Note nach IHK-Schlüssel und Auswertung je Thema. Themen: Linux, Netzwerk, Windows, Security, Skripte, Git & Docker, Hardware & Betrieb (RAID, USV, ITIL, Cloud-Modelle, Virtualisierung).
+- **Themen üben:** 10 Fragen zu einem Thema, mit Erklärung nach jeder Antwort.
+- **Subnetting-Trainer:** endlos neue Aufgaben (Hosts, Netz, Broadcast, Maske, erste/letzte Adresse, Präfix für N Geräte) mit vollständigem Lösungsweg.
+
+## 🏴 Wargame
+
+![Wargame](docs/screenshots/wargame.png)
+
+15 eigene Level im Mini-Linux: Jedes Level versteckt ein zufälliges Flag `FLAG{…}`, das du mit Shell-Werkzeugen findest – versteckte Dateien, seltsame Dateinamen, `find -size`, `grep`, `sort | uniq -u`, Base64, ROT13, verschachtelte Archive, `strings`, Umgebungsvariablen eines Prozesses und ein Endgegner. Läuft komplett im Browser, also auch in der Online-Demo.
 
 ## ⚙ VM-Zentrale
 
@@ -89,13 +127,14 @@ In der VM-Zentrale passiert alles, ohne dass du Multipass selbst öffnen musst:
 - **Pause, Fortsetzen und Herunterfahren:** Pause friert die VM ein und gibt CPU frei. Herunterfahren gibt auch den RAM frei. Ohne Eingaben pausiert die App die VM nach einstellbarer Zeit (Standard 30 Minuten).
 - **Feierabend:** fährt die VM herunter, sichert das Mini-Linux und zeigt, wie viele Trainingskarten morgen fällig sind.
 - **Snapshots:** anlegen, zurückspringen und löschen.
+- **⟲ Auf Werkszustand:** VM verbastelt? Ein Klick setzt sie auf den Snapshot „frisch“ zurück – auch direkt aus dem Missionen-Tab. Dein Lernfortschritt bleibt.
 - **Behalten oder löschen:** Die VM kann bleiben, zum Beispiel als Homelab-Spielwiese, oder komplett entfernt werden. Das Löschen musst du zweimal bestätigen.
 
 Login für manuelle SSH-Verbindungen: `ubuntu` / `linuxlab`. Das ist nur fürs lokale Lab gedacht.
 
 ## 🔁 Training (Wiederholung)
 
-54 Befehlskarten werden mit Lernkartei-System abgefragt (Leitner, Intervalle 10 Minuten bis 35 Tage). Du tippst die Lösung echt ins Terminal, die App prüft das Ergebnis.
+139 Befehlskarten (94 Linux, 45 Windows) werden mit Lernkartei-System abgefragt (Leitner, Intervalle 10 Minuten bis 35 Tage). Du tippst die Lösung echt ins Terminal, die App prüft das Ergebnis.
 Die Stufen schalten sich frei, je sicherer du wirst:
 
 - **Stufe 1:** Die Aufgabe nennt den Befehl fast direkt.
@@ -106,18 +145,29 @@ Hinweis und Lösung gibt es nur auf Knopfdruck.
 
 ## 🎯 Missionen (Fehlersuche)
 
-10 Störungen werden auf der VM versteckt eingebaut, zum Beispiel volle Platte, CPU-Fresser, kaputte nginx-Konfiguration, Firewall, Cron, SSH-Rechte, 502 Bad Gateway oder ein Container ohne Neustart. Du findest und behebst sie selbst. „Prüfen“ kontrolliert das Ergebnis, Tipps gibt es schrittweise.
+![Missionen](docs/screenshots/missionen.png)
+
+34 Störungen (24 Linux, 10 Windows) werden versteckt eingebaut, zum Beispiel volle Platte, CPU-Fresser, kaputte nginx-Konfiguration, Firewall, Cron, SSH-Rechte, 502 Bad Gateway, ein Container ohne Neustart, falsches Gateway oder ein fehlerhafter Git-Commit. Du findest und behebst sie selbst. „Prüfen“ kontrolliert das Ergebnis, Tipps gibt es schrittweise.
 
 ## Hinweise
 
 - Schritte werden automatisch abgehakt, sobald du den passenden Befehl ausführst.
 - „Zustand speichern“ sichert das komplette Mini-Linux im Browser (IndexedDB).
 - Der Server lauscht nur auf 127.0.0.1 und nimmt Anfragen nur von der eigenen Seite an. Passwörter werden nicht gespeichert. Der SSH-Schlüssel der App liegt in `data/`.
-- Neue Lektionen kommen in `lessons.js` (Linux), `lessons-ps.js` und `lessons-win.js` (Windows), Karten in `drills.js` und Missionen in `missions.js`.
+- Direktlinks: `?track=linux&tab=wargame` öffnet gleich den passenden Kurs und Tab (`lessons`, `train`, `missions`, `wargame`, `exam`).
+
+## Tests
+
+| Befehl | Was | Braucht |
+|---|---|---|
+| `npm test` | Inhalts-Test: IDs, Pflichtfelder, Regex-Prüfungen, Musterlösungen der Karten, Verweise, Prüfungsfragen, Wargame-Level und 3000 zufällige Subnetting-Aufgaben gegen eine unabhängige Rechnung | nur Node – läuft auch in GitHub Actions |
+| `npm run test:vm` | Jede Linux-Mission auf der echten VM: Setup → Prüfung muss scheitern → Musterlösung → Prüfung muss bestehen. Vorher Snapshot, danach zurück – deine VM bleibt, wie sie war. | laufende Übungs-VM |
+| `npm run test:vm-lessons -- --group net --snapshot` | Spielt Lektionen auf der VM durch und bewertet jeden Schritt mit derselben Prüfung wie die App | laufende Übungs-VM |
+| `npm run build:demo` | Baut die Online-Demo nach `dist/demo` | nur Node |
 
 ## Mitmachen
 
-Fehler gefunden oder Idee für eine Lektion bzw. Mission? Gern als Issue oder Pull Request.
+Fehler gefunden oder Idee für eine Lektion, Mission oder Prüfungsfrage? Gern als Issue oder Pull Request – wie die Inhalte aufgebaut sind, steht in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Lizenz
 

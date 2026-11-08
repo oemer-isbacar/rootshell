@@ -18,6 +18,7 @@ const MISSIONS = [
           `<code>sudo du -xh / --max-depth=1 2&gt;/dev/null | sort -h</code> zeigt die größten Ordner. Arbeite dich Ebene für Ebene runter.`,
           `Oder direkt: <code>sudo find / -xdev -size +1G 2&gt;/dev/null</code>`],
   solution: `<code>sudo find / -xdev -size +1G</code> findet <code>/var/lib/.sysdata/core.dump.0</code> → <code>sudo rm /var/lib/.sysdata/core.dump.0</code>`,
+  test: `rm /var/lib/.sysdata/core.dump.0`,
   setup: `mkdir -p /var/lib/.sysdata && fallocate -l 1500M /var/lib/.sysdata/core.dump.0 && echo ok`,
   verify: `if [ -e /var/lib/.sysdata/core.dump.0 ]; then echo "❌ Die große Datei ist noch da. ($(df -h / | awk 'NR==2{print $5}') belegt)"; exit 1; fi; echo "✅ Platz geschaffen – $(df -h / | awk 'NR==2{print $5}') belegt."`,
 },
@@ -29,6 +30,7 @@ const MISSIONS = [
           `Zu welchem Dienst gehört die PID? <code>systemctl status PID</code> verrät es.`,
           `Ein Dienst wird mit <code>systemctl stop</code> beendet und mit <code>systemctl disable</code> aus dem Autostart genommen (oder beides: <code>disable --now</code>).`],
   solution: `<code>systemctl status &lt;PID&gt;</code> → <code>netsync.service</code> → <code>sudo systemctl disable --now netsync</code>`,
+  test: `systemctl disable --now netsync`,
   setup: `cat > /etc/systemd/system/netsync.service <<'EOF'
 [Unit]
 Description=Network Sync Helper
@@ -52,6 +54,7 @@ echo "✅ Gestoppt und aus dem Autostart entfernt."`,
           `Lokale Namenseinträge stehen in <code>/etc/hosts</code> – schau mal rein.`,
           `Datei bearbeiten mit <code>sudo nano /etc/hosts</code>. Den falschen Eintrag korrigieren oder löschen.`],
   solution: `In <code>/etc/hosts</code> steht <code>10.255.255.1 wiki.lab</code> → ändern auf <code>127.0.0.1 wiki.lab</code>.`,
+  test: `sed -i '/wiki\\.lab/d' /etc/hosts; echo "127.0.0.1 wiki.lab" >> /etc/hosts; sleep 3`,
   setup: `sed -i '/wiki\\.lab/d' /etc/hosts; echo "10.255.255.1   wiki.lab   # alter Server" >> /etc/hosts; echo ok`,
   verify: `r=$(getent hosts wiki.lab | awk '{print $1}' | head -1); [ "$r" = "127.0.0.1" ] && { echo "✅ wiki.lab → 127.0.0.1"; exit 0; }; echo "❌ wiki.lab wird zu '\${r:-nichts}' aufgelöst."; exit 1`,
 },
@@ -81,6 +84,7 @@ id -nG lisa | grep -qw sudo || { echo "❌ lisa darf noch kein sudo."; f=1; }
           `<code>sudo nginx -t</code> prüft die Konfiguration und nennt Datei + Zeile des Fehlers.`,
           `Nach dem Reparieren: <code>sudo systemctl start nginx</code> (oder restart).`],
   solution: `<code>sudo nginx -t</code> → In <code>/etc/nginx/sites-enabled/default</code> fehlt ein <code>;</code> hinter <code>listen 80 default_server</code>. Korrigieren, dann <code>sudo systemctl restart nginx</code>.`,
+  test: `sed -i '0,/listen 80 default_server$/s//listen 80 default_server;/' /etc/nginx/sites-available/default && nginx -t && systemctl restart nginx`,
   setup: NEED_NGINX + `
 f=/etc/nginx/sites-available/default
 [ -f $f.lab-orig ] || cp $f $f.lab-orig
@@ -101,6 +105,7 @@ echo "✅ Die Seite ist wieder online."`,
           `Was sagt die Firewall? <code>sudo ufw status numbered</code>`,
           `Eine DENY-Regel muss weg (<code>sudo ufw delete NUMMER</code>) und eine ALLOW-Regel her (<code>sudo ufw allow 80/tcp</code>).`],
   solution: `<code>sudo ufw status numbered</code> → DENY-Regel für 80 löschen, dann <code>sudo ufw allow 80/tcp</code>.`,
+  test: `ufw delete deny 80/tcp && ufw allow 80/tcp`,
   setup: NEED_NGINX + `
 systemctl enable --now nginx >/dev/null 2>&1
 ufw allow OpenSSH >/dev/null; ufw delete allow 80/tcp >/dev/null 2>&1; ufw delete allow http >/dev/null 2>&1
@@ -119,6 +124,7 @@ echo "✅ Erreichbar – teste im Windows-Browser: http://$(hostname -I | awk '{
           `Führ das Skript mal selbst so aus, wie cron es aufruft. Was passiert? <code>ls -l</code> auf das Skript …`,
           `Cron-Fehler im Log: <code>journalctl -u cron -n 20</code>. Fehlendes Ausführungsrecht → <code>chmod +x</code>.`],
   solution: `<code>/usr/local/bin/aufraeumen.sh</code> ist nicht ausführbar → <code>sudo chmod +x /usr/local/bin/aufraeumen.sh</code>, dann eine Minute warten.`,
+  test: `chmod +x /usr/local/bin/aufraeumen.sh; sleep 70`,
   setup: `cat > /usr/local/bin/aufraeumen.sh <<'EOF'
 #!/bin/bash
 find /tmp -name "*.tmp" -mmin +60 -delete
@@ -159,6 +165,7 @@ echo "❌ Login per Schlüssel geht noch nicht: $out"; echo "Rechte: $(stat -c '
           `Läuft PHP-FPM? Welchen Socket stellt es bereit? <code>ls /run/php/</code>`,
           `Vergleiche den Socket mit <code>fastcgi_pass</code> in <code>/etc/nginx/sites-available/status</code>. Danach <code>nginx -t</code> und reload.`],
   solution: `In der Site-Konfiguration steht <code>php7.4-fpm.sock</code> – installiert ist eine neuere Version. <code>fastcgi_pass unix:/run/php/php-fpm.sock;</code> eintragen, <code>sudo nginx -t &amp;&amp; sudo systemctl reload nginx</code>.`,
+  test: `sed -i 's#php7.4-fpm.sock#php-fpm.sock#' /etc/nginx/sites-available/status && nginx -t && systemctl reload nginx && sleep 1`,
   setup: NEED_NGINX + `
 command -v php-fpm8.3 >/dev/null || ls /run/php/*.sock >/dev/null 2>&1 || { echo "Installiere PHP-FPM …"; apt-get install -y -qq php-fpm >/dev/null; }
 mkdir -p /var/www/status && echo '<?php echo "PHP läuft – Version " . PHP_VERSION;' > /var/www/status/status.php
@@ -281,6 +288,196 @@ rl=$(sshd -T 2>/dev/null | awk '/^permitrootlogin/{print $2}')
 [ "$rl" = no ] || { echo "❌ Root-Anmeldung per SSH ist noch erlaubt (permitrootlogin \${rl:-unbekannt}). Setze PermitRootLogin no."; exit 1; }
 echo "✅ Abgeriegelt: Firewall aktiv, nur SSH offen, Root-Login verboten."`,
 },
+{
+  id: "msec-restore", level: 2, title: "🛡️ Ransomware-Alarm",
+  story: `Montagmorgen: Die Firmen-Webseite unter <code>/srv/webseite</code> ist unbrauchbar. Alle Seiten tragen plötzlich die Endung <code>.locked</code>, daneben liegt eine Erpresser-Notiz. (Keine Sorge: Das ist eine harmlose Übung, nichts wurde wirklich verschlüsselt.) Zum Glück gibt es ein nächtliches Backup.`,
+  goal: `Stelle die Webseite aus dem Backup unter <code>/var/backups/webseite/</code> wieder her: Die Originaldateien müssen unverändert zurück sein, die <code>.locked</code>-Dateien und die Notiz verschwinden.`,
+  hints: [`Was liegt im Backup? <code>tar tzf /var/backups/webseite/*.tar.gz</code>`,
+          `Das Archiv enthält den Ordner <code>webseite/</code>. Auspacken mit <code>-C /srv</code> legt ihn wieder unter <code>/srv/</code> ab.`,
+          `Aufräumen: <code>sudo rm /srv/webseite/*.locked /srv/webseite/LIES-MICH.txt</code>`],
+  solution: `<code>sudo rm -f /srv/webseite/*.locked /srv/webseite/LIES-MICH.txt &amp;&amp; sudo tar xzf /var/backups/webseite/webseite-2026-11-01.tar.gz -C /srv</code>`,
+  setup: `mkdir -p /srv/webseite /var/backups/webseite /var/lib/rootshell
+rm -f /srv/webseite/*
+cat > /srv/webseite/index.html << 'EOF'
+<!doctype html><title>Muster GmbH</title><h1>Willkommen bei der Muster GmbH</h1><p>Ihr IT-Partner in der Region.</p>
+EOF
+echo '<h1>Impressum</h1><p>Muster GmbH, Musterstraße 1</p>' > /srv/webseite/impressum.html
+tar czf /var/backups/webseite/webseite-2026-11-01.tar.gz -C /srv webseite
+(cd /srv/webseite && sha256sum index.html impressum.html) > /var/lib/rootshell/webseite.sha256
+for f in /srv/webseite/*.html; do echo "Datei gesperrt (rootshell-Uebung)" > "$f.locked"; rm -f "$f"; done
+echo "Alle Ihre Dateien wurden gesperrt. (Dies ist eine harmlose Uebung von rootshell.)" > /srv/webseite/LIES-MICH.txt
+echo ok`,
+  verify: `cd /srv/webseite 2>/dev/null || { echo "❌ /srv/webseite fehlt ganz."; exit 1; }
+if ls /srv/webseite/*.locked >/dev/null 2>&1; then echo "❌ Es liegen noch .locked-Dateien herum."; exit 1; fi
+if [ -e /srv/webseite/LIES-MICH.txt ]; then echo "❌ Die Erpresser-Notiz LIES-MICH.txt ist noch da."; exit 1; fi
+sha256sum -c --quiet /var/lib/rootshell/webseite.sha256 >/dev/null 2>&1 || { echo "❌ index.html oder impressum.html fehlen oder sind nicht im Originalzustand."; exit 1; }
+echo "✅ Webseite aus dem Backup wiederhergestellt – Prüfsummen stimmen."`,
+},
+{
+  id: "msec-log", level: 3, title: "🛡️ Brute-Force im Log",
+  story: `Das Monitoring meldet eine Flut fehlgeschlagener SSH-Anmeldungen. Irgendwer probiert seit einer Weile Passwörter durch. Die Spuren stehen im Auth-Log.`,
+  goal: `Finde die IP-Adresse mit den <b>meisten</b> Fehlversuchen und sperre sie mit <code>ufw</code> für <b>alle</b> Ports. Achtung: Die Sperre muss <b>vor</b> der bestehenden SSH-Freigabe greifen. Legitime Anmeldungen dürfen nicht gesperrt werden.`,
+  hints: [`Die Meldungen stehen in <code>/var/log/auth.log</code> (oder <code>sudo journalctl -t sshd</code>). Suche nach <code>Failed password</code>.`,
+          `Zählen wie im Mini-SIEM: <code>sudo grep 'Failed password' /var/log/auth.log | grep -oE 'from [0-9.]+' | sort | uniq -c | sort -rn</code>`,
+          `ufw nimmt die <b>erste</b> passende Regel. <code>sudo ufw status numbered</code> zeigt die Reihenfolge, <code>sudo ufw insert 1 deny from IP</code> setzt die Sperre ganz nach oben.`],
+  solution: `<code>sudo ufw insert 1 deny from 203.0.113.55</code>`,
+  setup: `export DEBIAN_FRONTEND=noninteractive
+command -v ufw >/dev/null || apt-get install -y -qq ufw >/dev/null
+ufw delete deny from 203.0.113.55 >/dev/null 2>&1 || true
+ufw allow OpenSSH >/dev/null
+for i in $(seq 1 40); do logger -p auth.info -t sshd "Failed password for invalid user admin from 203.0.113.55 port $((40000+i)) ssh2"; done
+for i in 1 2 3; do logger -p auth.info -t sshd "Failed password for ubuntu from 198.51.100.23 port 5$((i))222 ssh2"; done
+logger -p auth.info -t sshd "Accepted publickey for ubuntu from 192.0.2.10 port 50122 ssh2"
+sleep 1
+echo ok`,
+  verify: `RULES=$(ufw show added 2>/dev/null)
+echo "$RULES" | grep -Eq 'deny( in)? from 192\\.0\\.2\\.10' && { echo "❌ 192.0.2.10 hat sich erfolgreich angemeldet (Accepted) – das ist ein Kollege, nicht der Angreifer."; exit 1; }
+L=$(echo "$RULES" | grep -nE 'deny( in)? from 203\\.0\\.113\\.55( |$)' | head -1 | cut -d: -f1)
+[ -n "$L" ] || { echo "❌ Die IP mit den meisten Fehlversuchen ist noch nicht gesperrt."; exit 1; }
+echo "$RULES" | grep -E 'deny( in)? from 203\\.0\\.113\\.55' | grep -Eq ' port | to ' && { echo "❌ Die Sperre gilt nur für einen Port. Sperre die Adresse komplett."; exit 1; }
+A=$(echo "$RULES" | grep -nE 'allow .*(OpenSSH|22)' | head -1 | cut -d: -f1)
+if [ -n "$A" ] && [ "$A" -lt "$L" ]; then echo "❌ Die Sperre steht HINTER 'allow OpenSSH' – ufw nimmt die erste passende Regel, der Angreifer käme also weiter an SSH. Nutze ufw insert 1 …"; exit 1; fi
+echo "✅ Angreifer 203.0.113.55 gesperrt – und zwar vor der SSH-Freigabe."`,
+},
+/* ---------- Netzwerk-Missionen (Teil 6) ---------- */
+{
+  id: "mnet-dns", level: 1, title: "🌐 Falsche Adresse",
+  story: `Ein Kollege beschwert sich: Auf dem Server liefert <code>curl http://example.com</code> nur einen Timeout. Auf seinem Laptop geht die Seite. <code>dig example.com</code> auf dem Server zeigt aber die richtige Adresse … seltsam.`,
+  goal: `Finde heraus, warum der Server <code>example.com</code> falsch auflöst, und behebe es, ohne die übrigen Einträge zu beschädigen.`,
+  hints: [`Vergleiche: <code>dig +short example.com</code> fragt nur DNS, <code>getent hosts example.com</code> löst auf wie jedes Programm.`,
+          `Bevor DNS gefragt wird, schaut Linux in eine lokale Datei.`,
+          `In <code>/etc/hosts</code> steht ein falscher Eintrag. Löschen z. B. mit <code>sudo nano /etc/hosts</code>.`],
+  solution: `<code>sudo sed -i '/203.0.113.80/d' /etc/hosts</code>`,
+  setup: `grep -q '203.0.113.80' /etc/hosts || echo "203.0.113.80 example.com www.example.com   # lokaler Cache" >> /etc/hosts
+echo ok`,
+  verify: `grep -qE '^127\\.0\\.0\\.1\\s+localhost' /etc/hosts || { echo "❌ Die Zeile '127.0.0.1 localhost' fehlt in /etc/hosts – da wurde zu viel gelöscht."; exit 1; }
+grep -q '203\\.0\\.113\\.80' /etc/hosts && { echo "❌ In /etc/hosts steht noch ein Eintrag mit 203.0.113.80."; exit 1; }
+resolvectl flush-caches 2>/dev/null; sleep 2
+if getent hosts example.com | grep -q '203.0.113.80'; then echo "❌ example.com wird immer noch zu 203.0.113.80 aufgelöst."; exit 1; fi
+echo "✅ example.com wird wieder richtig aufgelöst ($(getent hosts example.com | awk '{print $1; exit}'))."`,
+},
+{
+  id: "mnet-bind", level: 2, title: "🌐 Intranet nur für sich selbst",
+  story: `Das neue Intranet läuft auf dem Server als Dienst <code>intranet</code>. Auf dem Server selbst klappt <code>curl localhost:8088</code> – aber kein Kollege erreicht <code>http://{{IP}}:8088</code>.`,
+  goal: `Sorge dafür, dass das Intranet über die Netzwerkadresse des Servers erreichbar ist – dauerhaft, also auch nach einem Neustart des Dienstes.`,
+  hints: [`Auf welcher Adresse lauscht der Dienst? <code>sudo ss -tlnp | grep 8088</code>`,
+          `<code>127.0.0.1</code> ist nur von innen erreichbar. Wie der Dienst gestartet wird, steht in seiner Unit: <code>systemctl cat intranet</code>`,
+          `Unit bearbeiten mit <code>sudo systemctl edit --full intranet</code> (oder die Datei unter <code>/etc/systemd/system/</code>), danach <code>sudo systemctl daemon-reload</code> und <code>sudo systemctl restart intranet</code>.`],
+  solution: `<code>sudo sed -i 's/--bind 127.0.0.1/--bind 0.0.0.0/' /etc/systemd/system/intranet.service &amp;&amp; sudo systemctl daemon-reload &amp;&amp; sudo systemctl restart intranet</code>`,
+  setup: `mkdir -p /srv/intranet && echo '<h1>Intranet der Muster GmbH</h1>' > /srv/intranet/index.html
+cat > /etc/systemd/system/intranet.service << 'EOF'
+[Unit]
+Description=Firmen-Intranet
+After=network.target
+[Service]
+ExecStart=/usr/bin/python3 -m http.server 8088 --bind 127.0.0.1 --directory /srv/intranet
+Restart=always
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload
+systemctl enable intranet >/dev/null 2>&1
+systemctl restart intranet
+sleep 1
+echo ok`,
+  verify: `systemctl is-active --quiet intranet || { echo "❌ Der Dienst 'intranet' läuft nicht."; exit 1; }
+systemctl is-enabled --quiet intranet || { echo "❌ Der Dienst 'intranet' startet nicht automatisch (enable)."; exit 1; }
+IP=$(hostname -I | awk '{print $1}')
+curl -s --max-time 3 "http://$IP:8088/" | grep -q Intranet || { echo "❌ Unter http://$IP:8088 antwortet das Intranet noch nicht."; exit 1; }
+grep -q -- '--bind 127.0.0.1' /etc/systemd/system/intranet.service && { echo "❌ Läuft gerade, aber die Unit-Datei bindet noch an 127.0.0.1 – beim nächsten Start wäre es wieder kaputt."; exit 1; }
+echo "✅ Das Intranet ist unter http://$IP:8088 für alle erreichbar."`,
+},
+{
+  id: "mnet-gw", level: 2, title: "🌐 Kein Weg nach draußen",
+  story: `Seit einer Wartung schlagen auf dem Server alle Updates fehl: <code>ping 1.1.1.1</code> bekommt keine Antwort. Das lokale Netz funktioniert, du bist ja per SSH verbunden. Der Netzplan liegt unter <code>/etc/netzplan.txt</code>.`,
+  goal: `Finde den Fehler in der Netzwerkkonfiguration und stelle den Weg ins Internet wieder her.`,
+  hints: [`Arbeite die Schichten ab: Schnittstelle, Adresse, <b>Gateway</b>, Internet. <code>ip route</code> zeigt, wohin Pakete nach draußen gehen.`,
+          `Vergleiche das Gateway in <code>ip route</code> mit dem im Netzplan. Antwortet es überhaupt? <code>ping -c 2 ADRESSE</code>`,
+          `Falsche Standardroute ersetzen: <code>sudo ip route replace default via RICHTIGE-ADRESSE</code>`],
+  solution: `<code>sudo ip route replace default via $(awk '/Gateway/ {print $2}' /etc/netzplan.txt)</code><br><small>Die Route im laufenden System ist nicht dauerhaft: Nach einem Neustart kommt das richtige Gateway wieder per DHCP. Bei fester IP stünde es in <code>/etc/netplan/</code>.</small>`,
+  test: `ip route replace default via $(awk '/Gateway/ {print $2}' /etc/netzplan.txt)`,
+  setup: `mkdir -p /var/lib/rootshell
+DEV=$(ip route show default | awk '{print $5; exit}')
+GW=$(grep -h '^ROUTER=' /run/systemd/netif/leases/* 2>/dev/null | head -1 | cut -d= -f2 | cut -d' ' -f1)
+[ -n "$GW" ] || GW=$(ip route show default | awk '{print $3; exit}')
+[ -n "$DEV" ] || DEV=eth0
+echo "$GW $DEV" > /var/lib/rootshell/gw
+WRONG="\${GW%.*}.254"; [ "$WRONG" = "$GW" ] && WRONG="\${GW%.*}.253"
+cat > /etc/netzplan.txt << EOF
+Netzplan Labor-Netz
+------------------
+Router/Gateway: $GW
+Server fis-lab: per DHCP
+EOF
+while ip route del default 2>/dev/null; do :; done
+ip route add default via "$WRONG" dev "$DEV" onlink metric 100
+echo ok`,
+  verify: `read GW DEV < /var/lib/rootshell/gw
+ip route get 1.1.1.1 | grep -q "via $GW " || { echo "❌ Pakete ins Internet gehen nicht über den Router aus dem Netzplan. Aktuell: $(ip route get 1.1.1.1 2>&1 | head -1)"; exit 1; }
+echo "✅ Der Weg ins Internet führt wieder über das richtige Gateway ($GW)."`,
+},
+/* ---------- Git & Docker (Teil 7) ---------- */
+{
+  id: "mdev-git", level: 2, title: "🌿 Wer hat den Port kaputt gemacht?",
+  story: `Die Webapp in <code>~/webapp</code> startet nicht mehr: Der Port in <code>app.conf</code> ist plötzlich ungültig. Im Team arbeiten mehrere Leute mit Git. Irgendein Commit der letzten Tage war schuld.`,
+  goal: `Finde den schuldigen Commit und nimm <b>nur diese</b> Änderung zurück – ohne die Geschichte umzuschreiben (kein <code>reset</code>) und ohne die späteren Änderungen der Kollegen zu verlieren.`,
+  hints: [`<code>cd ~/webapp && git log --oneline</code>, dann je Commit <code>git show ID</code> – oder gezielt: <code>git log -p app.conf</code>`,
+          `Ein schon geteilter Commit wird nicht gelöscht, sondern mit einem Gegen-Commit zurückgenommen.`,
+          `<code>git revert ID</code> legt diesen Gegen-Commit an (mit <code>--no-edit</code> ohne Editor).`],
+  solution: `<code>cd ~/webapp &amp;&amp; git revert --no-edit HEAD~1</code>`,
+  test: `sudo -u ubuntu git -C /home/ubuntu/webapp revert --no-edit HEAD~1`,
+  setup: `export DEBIAN_FRONTEND=noninteractive
+command -v git >/dev/null || apt-get install -y -qq git >/dev/null
+mkdir -p /var/lib/rootshell
+rm -rf /home/ubuntu/webapp
+sudo -u ubuntu bash << 'EOF'
+set -e
+mkdir -p /home/ubuntu/webapp && cd /home/ubuntu/webapp
+git init -q -b main
+git config user.name "Kollege Kai"; git config user.email kai@example.com
+printf 'port=8080\\nloglevel=info\\nmax_clients=100\\n' > app.conf
+echo "# Webapp" > README.md
+git add . && git commit -qm "Grundkonfiguration"
+echo "Start: ./start.sh" >> README.md && git commit -qam "Doku ergänzt"
+git config user.name "Kollegin Lea"; git config user.email lea@example.com
+sed -i 's/port=8080/port=80800/; s/max_clients=100/max_clients=150/' app.conf && git commit -qam "Kleine Optimierungen"
+git config user.name "Kollege Kai"; git config user.email kai@example.com
+echo "Kontakt: it@example.com" >> README.md && git commit -qam "Kontakt ergänzt"
+git config user.name "Azubi"; git config user.email azubi@example.com
+EOF
+sudo -u ubuntu git -C /home/ubuntu/webapp rev-parse HEAD~1 > /var/lib/rootshell/badcommit
+echo ok`,
+  verify: `R=/home/ubuntu/webapp
+G() { sudo -u ubuntu git -C "$R" "$@"; }
+[ -d "$R/.git" ] || { echo "❌ ~/webapp ist kein Git-Repository mehr. Mission neu vorbereiten."; exit 1; }
+BAD=$(cat /var/lib/rootshell/badcommit)
+grep -qx 'port=8080' "$R/app.conf" || { echo "❌ In app.conf steht noch nicht wieder port=8080."; exit 1; }
+grep -q 'Kontakt' "$R/README.md" || { echo "❌ Die spätere Änderung (Kontakt in README.md) ist verloren gegangen."; exit 1; }
+G merge-base --is-ancestor "$BAD" HEAD || { echo "❌ Der fehlerhafte Commit fehlt in der Geschichte – sie wurde umgeschrieben. Nimm ihn mit revert zurück."; exit 1; }
+[ -z "$(G status --porcelain)" ] || { echo "❌ Es gibt noch nicht committete Änderungen. Die Korrektur gehört in einen Commit."; exit 1; }
+echo "✅ Fehler per revert zurückgenommen – Geschichte und spätere Änderungen sind erhalten."`,
+},
+{
+  id: "mdev-docker", level: 2, title: "🐳 Der Shop antwortet nicht",
+  story: `Der Online-Shop läuft als Container <code>shop</code>. <code>docker ps</code> zeigt ihn als „Up“, aber <code>curl localhost:8095</code> liefert nur einen Fehler. (Das Vorbereiten installiert ggf. Docker und lädt ein Image – das kann 1–2 Minuten dauern.)`,
+  goal: `Sorge dafür, dass unter <code>http://localhost:8095</code> die Webseite aus dem Container kommt. Der Container soll weiterhin <code>shop</code> heißen und nach einem Neustart des Servers automatisch wieder laufen.`,
+  hints: [`<code>sudo docker ps</code> zeigt die Port-Zuordnung als <code>HOST:CONTAINER</code>.`,
+          `Auf welchem Port lauscht nginx <b>im</b> Container? Standard ist 80. Die Zuordnung zeigt auf 8080.`,
+          `Eine Port-Zuordnung lässt sich nicht nachträglich ändern: Container löschen (<code>docker rm -f shop</code>) und richtig neu starten – mit <code>--restart unless-stopped</code>.`],
+  solution: `<code>sudo docker rm -f shop &amp;&amp; sudo docker run -d --name shop --restart unless-stopped -p 8095:80 nginx:alpine</code>`,
+  setup: `export DEBIAN_FRONTEND=noninteractive
+command -v docker >/dev/null || { echo "Installiere Docker …"; apt-get update -qq && apt-get install -y -qq docker.io >/dev/null; }
+systemctl enable --now docker >/dev/null 2>&1
+docker rm -f shop >/dev/null 2>&1 || true
+docker run -d --name shop --restart unless-stopped -p 8095:8080 nginx:alpine >/dev/null
+echo ok`,
+  verify: `command -v docker >/dev/null || { echo "❌ Docker ist nicht installiert."; exit 1; }
+[ "$(docker inspect -f '{{.State.Running}}' shop 2>/dev/null)" = true ] || { echo "❌ Es läuft kein Container namens 'shop'."; exit 1; }
+curl -s --max-time 3 localhost:8095 | grep -qi nginx || { echo "❌ Unter localhost:8095 kommt noch keine Webseite."; exit 1; }
+RP=$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' shop)
+[ "$RP" = always ] || [ "$RP" = unless-stopped ] || { echo "❌ Der Container startet nach einem Neustart nicht automatisch (Restart-Policy: $RP)."; exit 1; }
+echo "✅ Der Shop ist erreichbar und überlebt auch einen Neustart."`,
+},
 /* ---------- PowerShell-Kurs (track: windows) – du arbeitest als ubuntu in PowerShell, geprüft wird von außen ---------- */
 {
   id: "mps-report", track: "windows", level: 1, title: "Bericht für die Chefin",
@@ -392,6 +589,7 @@ ZIEL="$HOME/backups"
 mkdir -p "$ZIEL"
 tar -czf "$ZIEL/projekt-$(date +%F_%H%M%S).tar.gz" -C "$HOME" projekt
 ls -1t "$ZIEL"/projekt-*.tar.gz | tail -n +6 | xargs -r rm --</pre>`,
+  testFile: "/home/ubuntu/bin/backup.sh",
   setup: `rm -rf /home/ubuntu/projekt /home/ubuntu/backups /home/ubuntu/bin/backup.sh
 mkdir -p /home/ubuntu/projekt/docs /home/ubuntu/bin
 echo "Wichtige Notizen" > /home/ubuntu/projekt/notizen.txt
@@ -445,6 +643,7 @@ while read -r ziel proz; do
 done &lt; &lt;(df --output=target,pcent -x tmpfs -x squashfs -x devtmpfs -x efivarfs -x overlay | tail -n +2)
 (( warn )) &amp;&amp; exit 1
 echo "OK"</pre>`,
+  testFile: "/home/ubuntu/bin/platzcheck.sh",
   setup: `rm -f /home/ubuntu/bin/platzcheck.sh; mkdir -p /home/ubuntu/bin; chown ubuntu:ubuntu /home/ubuntu/bin; echo ok`,
   verify: `S=/home/ubuntu/bin/platzcheck.sh
 [ -x "$S" ] || { echo "❌ ~/bin/platzcheck.sh fehlt oder ist nicht ausführbar."; exit 1; }
@@ -481,6 +680,7 @@ if [[ ! -r $LOG ]]; then
   exit 1
 fi
 awk '{print $1}' "$LOG" | sort | uniq -c | sort -rn | head -n "$ANZAHL"</pre>`,
+  testFile: "/home/ubuntu/bin/toplog.sh",
   setup: `mkdir -p /home/ubuntu/logs /home/ubuntu/bin; rm -f /home/ubuntu/bin/toplog.sh
 for ip in 192.168.1.10 192.168.1.10 192.168.1.10 10.0.0.7 10.0.0.7 172.16.0.3 192.168.1.10 10.0.0.7 192.168.1.44; do
   for i in $(seq 1 $((RANDOM % 20 + 5))); do printf '%s - - [07/Nov/2026:09:%02d:11 +0100] "GET /seite%s HTTP/1.1" 200 1024 "-" "Mozilla/5.0"\\n' "$ip" $((RANDOM % 60)) "$i"; done
