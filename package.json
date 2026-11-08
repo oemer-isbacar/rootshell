@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test test/",
+    "test": "node --test test/content.test.js",
     "test:vm": "node test/vm-missions.js",
     "test:vm-lessons": "node test/vm-lessons.js",
     "build:demo": "node scripts/build-demo.js"
