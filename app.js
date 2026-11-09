@@ -459,6 +459,7 @@ let lastAutoConnect = 0; // letzter automatischer Verbindungsversuch
 let activeVm = "server";  // mit welcher VM das Terminal (ssh/ps) arbeitet
 let prepared = null;      // ID der Übung, die in dieser Sitzung in der Übungs-VM vorbereitet wurde
 let preparing = false;    // Vorbereitung läuft gerade
+let preparedMini = null;  // ID der Browser-Lektion, deren Übungsdaten im Mini-Linux bereitstehen
 const VM_IDS = ["uebung", "server"];
 const VM_LABEL = { uebung: "🧪 Übungs-VM", server: "🖥 Server-VM" };
 const VM_PLAIN = { uebung: "Übungs-VM", server: "Server-VM" };
@@ -1034,6 +1035,8 @@ function renderLesson(scrollToActive = false) {
   }
   if (!STATIC && lmode === mode && (lmode === "ssh" || lmode === "ps")) html += vmBox(lesson);
   if (lmode === "sql" && mode === "sql") sqlEnsure(lesson);
+  if (lmode === "browser" && mode === "browser" && lesson.prep && preparedMini !== lesson.id)
+    html += `<div class="box tip">📦 Diese Lektion braucht Übungsdaten im Mini-Linux. <button class="primary" data-action="prep-mini">▶ Übungsdaten bereitstellen</button></div>`;
   if (lesson.topic) html = pathBar(lesson.topic, lesson.stage) + html;
   html += `<p class="intro">${lesson.intro}</p>`;
   lesson.steps.forEach((s, i) => {
@@ -1154,6 +1157,12 @@ $(".tutor").addEventListener("click", async (e) => {
   }
   if (act?.dataset.action === "vm-connect") { const id = act.dataset.target || wantedVm(); if (!isRemote()) setMode(vmMode()); connectManaged({ vm: id }); return; }
   if (act?.dataset.action === "prep") { prepareExercise(); return; }
+  if (act?.dataset.action === "prep-mini") {
+    const l = LESSONS[progress.lesson];
+    if (!vm.loggedIn) { toast("Das Mini-Linux startet noch – einen Moment."); return; }
+    vmRunHidden(l.prep); preparedMini = l.id;
+    toast("📦 Übungsdaten sind bereit."); renderLesson(); setTimeout(() => term.focus(), 1600); return;
+  }
   const go = e.target.closest("[data-goto]");
   if (go) { gotoStation(go.dataset.goto); return; }
   if (act?.dataset.action === "sb-start") { if (mode !== "win") setMode("win"); startSandbox(); return; }
@@ -1391,10 +1400,15 @@ function genFlag() {
   return `FLAG{${WG_WORDS[b[0] % WG_WORDS.length]}-${[...b.slice(1)].map((x) => x.toString(16).padStart(2, "0")).join("")}}`;
 }
 /* Skript unsichtbar im Mini-Linux ausführen (base64, damit das Flag nicht im Klartext durchs Terminal läuft) */
+/* Skript unsichtbar im Mini-Linux ausführen. Die BusyBox-Shell nimmt nur ~1000 Zeichen pro Zeile an –
+ * deshalb geht das Skript base64-kodiert in Stücken in eine Datei und wird erst dann ausgeführt. */
 function vmRunHidden(script) {
   const b64 = btoa(unescape(encodeURIComponent(script)));
-  vm.send(` echo ${b64} | base64 -d | sh >/dev/null 2>&1; clear\n`);
-  setTimeout(() => { if (mode === "browser") term.clear(); vm.scroll = ""; }, 1500);
+  const parts = b64.match(/.{1,700}/g) || [];
+  vm.send(" rm -f /tmp/.rs_prep\n");
+  for (const p of parts) vm.send(` echo -n ${p} >> /tmp/.rs_prep\n`);
+  vm.send(" base64 -d /tmp/.rs_prep | sh >/dev/null 2>&1; rm -f /tmp/.rs_prep; clear\n");
+  setTimeout(() => { if (mode === "browser") term.clear(); vm.scroll = ""; }, 1500 + parts.length * 700);
 }
 const wgUnlocked = (i) => i === 0 || !!wg.solved[WARGAME[i - 1].id];
 function renderWargame() {

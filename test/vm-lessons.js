@@ -6,6 +6,7 @@
  *   npm run test:vm-lessons -- --group net            eine ganze Gruppe (Teil)
  *   --snapshot   vorher sichern und danach zurückspielen (empfohlen – Lektionen installieren Software)
  *   --vm uebung|server   in welcher VM (Standard: die VM der ersten Lektion). Übungen mit prep werden vorher vorbereitet.
+ *   --reset-each   (Übungs-VM) vor jeder Lektion auf „basis“ zurücksetzen + prep – prüft, dass jede Übung für sich allein läuft
  *
  * Nur für Lektionen mit mode "ssh". Schritte ohne Befehl oder mit eigener Aufgabe (task) werden übersprungen.
  */
@@ -22,6 +23,7 @@ const group = gi >= 0 ? args[gi + 1] : null;
 const vi = args.indexOf("--vm");
 const ids = args.filter((a, i) => !a.startsWith("--") && args[i - 1] !== "--group" && args[i - 1] !== "--vm");
 const snapshot = args.includes("--snapshot");
+const resetEach = args.includes("--reset-each");   // nur Übungs-VM: vor jeder Lektion auf „basis“ zurücksetzen (wie die App)
 const SNAP = "vor-test";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -50,13 +52,16 @@ async function job(j) {
   if (j.error) throw new Error(j.error);
   for (;;) { const s = vmctl.getJob(j.id); if (s.done) { if (!s.ok) throw new Error(s.log.slice(-400)); return; } await sleep(2000); }
 }
-// Befehl als ubuntu ausführen; Arbeitsverzeichnis bleibt zwischen den Befehlen erhalten (wie in einer echten Sitzung)
+// Befehl als ubuntu ausführen – wie in einer echten Terminal-Sitzung bleiben Arbeitsverzeichnis, Variablen,
+// exportierte Werte (z. B. PATH) und Funktionen zwischen den Befehlen erhalten (gesichert in /tmp/.rs_env).
+// Fragt ein Befehl mit read nach einer Eingabe, bekommt er „rootshell-test“.
 let PROF = vmctl.profile("server");
+const SAVE_ENV = `{ declare -p 2>/dev/null | grep -vE '^declare -[a-zA-Z]*r|^declare -[a-zA-Z-]* (BASH[A-Z_]*|EUID|PPID|SHELLOPTS|UID|GROUPS|FUNCNAME|PIPESTATUS|DIRSTACK|_|COLUMNS|LINES|OLDPWD|PWD|SHLVL|HISTCMD|RANDOM|SECONDS|LINENO|EPOCHSECONDS|EPOCHREALTIME|SRANDOM)='; declare -f; } > /tmp/.rs_env 2>/dev/null`;
 async function sh(cmd, ip) {
   // ohne Terminal meldet debconf „unable to re-open stdin“ – das wäre ein Fehlalarm, in der App gibt es ein echtes Terminal
-  const script = `export DEBIAN_FRONTEND=noninteractive\ncd "$(cat /tmp/.rs_cwd 2>/dev/null || echo ~)" 2>/dev/null || cd ~\n${cmd.replace(/\{\{IP\}\}/g, ip)}\npwd > /tmp/.rs_cwd`;
+  const script = `export DEBIAN_FRONTEND=noninteractive\n[ -f /tmp/.rs_env ] && source /tmp/.rs_env 2>/dev/null\ncd "$(cat /tmp/.rs_cwd 2>/dev/null || echo ~)" 2>/dev/null || cd ~\n${cmd.replace(/\{\{IP\}\}/g, ip)}\n__rc=$?; pwd > /tmp/.rs_cwd; ${SAVE_ENV}; exit $__rc`;
   const b64 = Buffer.from(script).toString("base64");
-  const r = await vmctl.mp(["exec", PROF.name, "--", "sudo", "-u", "ubuntu", "-H", "bash", "-c", `echo ${b64} | base64 -d | bash 2>&1`], { timeout: 600000 });
+  const r = await vmctl.mp(["exec", PROF.name, "--", "sudo", "-u", "ubuntu", "-H", "bash", "-c", `echo ${b64} | base64 -d > /tmp/.rs_script && printf 'rootshell-test\\n' | bash /tmp/.rs_script 2>&1`], { timeout: 600000 });
   return (r.stdout + r.stderr).replace(/\r/g, "");
 }
 
@@ -75,11 +80,17 @@ async function sh(cmd, ip) {
   }
   let failed = 0, total = 0;
   try {
-    const ip = (await vmctl.env()).vms[PROF.id].vm.ip;
-    await sh("rm -f /tmp/.rs_cwd", ip);
+    let ip = (await vmctl.env()).vms[PROF.id].vm.ip;
+    await sh("rm -f /tmp/.rs_cwd /tmp/.rs_env", ip);
     for (const l of list) {
       console.log(`\n== ${l.id} · ${l.title}`);
-      if (l.prep) {
+      if (!resetEach) await sh("rm -f /tmp/.rs_env", ip);   // neue Lektion = neue Sitzung
+      if (resetEach) {
+        // wie „Übung vorbereiten“ in der App: zurück auf „basis“, dann prep – so fällt auf, wenn eine Übung von einer anderen abhängt
+        try { await job(vmctl.prepareJob("Test: Übung vorbereiten", l.prep || "", "prep", "uebung")); console.log("   OK   zurückgesetzt auf „basis“" + (l.prep ? " + prep" : "")); }
+        catch (e) { failed++; console.log("   FAIL Übung vorbereiten\n        " + e.message.slice(-300)); continue; }
+        ip = (await vmctl.env()).vms.uebung.vm.ip;
+      } else if (l.prep) {
         const p = await vmctl.execScript(l.prep, 600000, PROF.id);
         console.log(`   ${p.ok ? "OK  " : "FAIL"} prep (Übung vorbereiten)`);
         if (!p.ok) { failed++; console.log("        " + (p.stdout + p.stderr).trim().slice(-300)); continue; }

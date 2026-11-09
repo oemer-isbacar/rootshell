@@ -76,8 +76,12 @@ test("Lernpfad: Themen, Stufen und VMs", () => {
       assert.ok(["ssh", "ps"].includes(l.mode), `${l.id}: vm gibt es nur bei mode ssh/ps`);
     }
     if (l.prep !== undefined) {
-      assert.strictEqual(l.vm, "uebung", `${l.id}: prep nur bei Übungen (vm: "uebung")`);
+      assert.ok(l.vm === "uebung" || (l.mode || "browser") === "browser", `${l.id}: prep nur bei Übungen (vm: "uebung") oder im Mini-Linux`);
       assert.strictEqual(typeof l.prep, "string", `${l.id}: prep muss ein Skript (Text) sein`);
+      if ((l.mode || "browser") === "browser") {   // läuft im Mini-Linux über die serielle Konsole (wie das Wargame)
+        assert.ok(Buffer.from(l.prep).toString("base64").length < 3500, `${l.id}: prep zu lang für die serielle Konsole`);
+        assert.ok(!/\bbash\b|python|perl/.test(l.prep), `${l.id}: prep nutzt Programme, die das Mini-Linux nicht hat`);
+      }
     }
     if (l.topic !== undefined || l.stage !== undefined) {
       assert.ok(topics.has(l.topic), `${l.id}: Thema ${l.topic} fehlt in topics.js`);
