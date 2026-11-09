@@ -118,8 +118,9 @@ kbd { font-family: ui-monospace, Consolas, monospace; font-size: 11px; border: 1
 .mode-switch button { border: none; background: none; border-radius: 6px; padding: 5px 10px; color: var(--muted); }
 .mode-switch button.on { background: #2b3240; color: var(--text); }
 body[data-mode="browser"] .only-ssh, body[data-mode="ssh"] .only-browser, body[data-mode="ps"] .only-browser { display: none; }
+body[data-mode="sql"] .only-ssh, body[data-mode="sql"] .only-browser, body[data-mode="sql"] #terminal, body[data-mode="sql"] .term-hint, body:not([data-mode="sql"]) #sqlpane { display: none; }
 body:not([data-mode="win"]) .only-win, body[data-mode="win"] .only-ssh, body[data-mode="win"] .only-browser { display: none; }
-body[data-track="windows"] .mode-switch [data-mode="browser"], body[data-track="windows"] .mode-switch [data-mode="ssh"],
+body[data-track="windows"] .mode-switch [data-mode="browser"], body[data-track="windows"] .mode-switch [data-mode="ssh"], body[data-track="windows"] .mode-switch [data-mode="sql"],
 body:not([data-track="windows"]) .mode-switch [data-mode="ps"], body:not([data-track="windows"]) .mode-switch [data-mode="win"] { display: none; }
 body[data-track="windows"] { --accent: #60a5fa; --accent-2: #3b82f6; }
 body[data-track="windows"] button.primary { color: #04122b; }
@@ -246,7 +247,7 @@ pre.verify.bad { background: #2a1212; border: 1px solid #7f1d1d; color: #fecaca;
 .demo-badge:hover { background: #4a3a10; }
 .demo-badge[hidden] { display: none; }
 body[data-static] #btn-vm, body[data-static] #btn-endday, body[data-static] .only-ssh, body[data-static] .only-win { display: none !important; }
-body[data-static] .mode-switch button:not([data-mode="browser"]) { opacity: .45; }
+body[data-static] .mode-switch button:not([data-mode="browser"]):not([data-mode="sql"]) { opacity: .45; }
 body[data-track="windows"] .only-linux { display: none; }
 .box a, .checks a { color: var(--link); }
 .opt { color: var(--warn); font-weight: 700; margin-right: 6px; }
@@ -288,3 +289,48 @@ button.small { font-size: 12px; padding: 2px 6px; }
 .review.bad { border-left-color: #7f1d1d; background: #1a1012; }
 .review code, .box code { font-family: ui-monospace, Consolas, monospace; font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; color: #fde68a; }
 .progress > div { height: 100%; background: var(--accent); border-radius: 3px; transition: width .3s; }
+
+/* ---------- Lernpfad ①–④ ---------- */
+.pathbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 12px; padding: 8px 10px;
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; }
+.pathtopic { font-weight: 600; margin-right: 6px; }
+.pathbar .station { padding: 4px 10px; border-radius: 999px; font-size: 12px; }
+.pathbar .station.on { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.pathbar .station.done { color: var(--accent-2); }
+.patharrow { color: var(--muted); }
+.btnrow.center { justify-content: center; margin-top: 10px; }
+
+/* ---------- VM-Zentrale: zwei Karten ---------- */
+.vmcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; margin: 8px 0 14px; }
+.vmcard { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 0; }
+.vmcard.active { border-color: var(--accent-2); }
+.vmcard h4 { margin-top: 0; }
+.snapbox { margin-top: 8px; }
+.snapbox summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+
+/* ---------- SQL-Konsole (Modus "sql") ---------- */
+.sqlpane { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; background: var(--bg); color: var(--text); }
+.sql-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--panel); }
+.sql-actions { margin-left: auto; }
+.sql-body { flex: 1 1 auto; display: flex; min-height: 0; }
+.sql-schema { flex: 0 0 210px; overflow: auto; padding: 8px 10px; border-right: 1px solid var(--border); font-size: 13px; }
+.sql-schema h5 { margin: 10px 0 4px; font-size: 13px; }
+.sql-schema h5 button { font: inherit; font-weight: 600; padding: 1px 6px; color: var(--accent); }
+.sql-schema ul { margin: 0; padding-left: 14px; color: var(--muted); font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+.sql-main { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; padding: 10px 12px; gap: 8px; }
+#sql-input { flex: 0 0 auto; min-height: 96px; resize: vertical; background: var(--code-bg); color: var(--accent); border: 1px solid var(--border);
+  border-radius: 6px; padding: 8px; font: 14px/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace; }
+#sql-input:focus { outline: 1px solid var(--accent-2); }
+.sql-run { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sql-out { flex: 1 1 auto; overflow: auto; min-height: 0; }
+.sql-out table { border-collapse: collapse; font: 13px/1.4 ui-monospace, Consolas, monospace; }
+.sql-out th, .sql-out td { border: 1px solid var(--border); padding: 3px 8px; text-align: left; vertical-align: top; }
+.sql-out th { white-space: nowrap; }
+.sql-out td { white-space: pre-wrap; max-width: 34em; }
+.sql-out th { background: var(--panel-2); color: var(--link); }
+.sql-out td.num { text-align: right; }
+.sql-out td.null { color: var(--muted); font-style: italic; }
+.sql-msg { margin: 6px 0; font-size: 13px; color: var(--muted); }
+.sql-msg.err { color: #fca5a5; white-space: pre-wrap; font-family: ui-monospace, Consolas, monospace; }
+.sql-msg.ok { color: var(--accent); }
+@media (max-width: 900px) { .sql-schema { display: none; } }

@@ -9,6 +9,25 @@ export DEBIAN_FRONTEND=noninteractive
 systemctl disable --now apache2 >/dev/null 2>&1 || true
 command -v nginx >/dev/null || { echo "Installiere nginx …"; apt-get update -qq && apt-get install -y -qq nginx >/dev/null; }
 `;
+/* MariaDB installieren (falls nötig) und eine kleine Shop-Datenbank anlegen – für die Datenbank-Störfälle */
+const NEED_MARIADB = `
+export DEBIAN_FRONTEND=noninteractive
+command -v mariadb >/dev/null || { echo "Installiere MariaDB …"; apt-get update -qq && apt-get install -y -qq mariadb-server >/dev/null; }
+systemctl enable --now mariadb >/dev/null 2>&1
+`;
+const SHOP_DB = `
+mariadb <<'SQL'
+DROP DATABASE IF EXISTS shop;
+CREATE DATABASE shop;
+USE shop;
+CREATE TABLE kunden (id INT PRIMARY KEY, name VARCHAR(60), ort VARCHAR(40));
+INSERT INTO kunden VALUES (1,'Bäckerei Sonnenschein','Calw'), (2,'Autohaus Wagner','Nagold'), (3,'Praxis Dr. Yılmaz','Pforzheim'),
+  (4,'Café Kranz','Calw'), (5,'Schreinerei Holzwurm','Bad Liebenzell'), (6,'Blumen Maier','Hirsau');
+CREATE TABLE bestellungen (id INT AUTO_INCREMENT PRIMARY KEY, kunde_id INT, datum DATE, betrag DECIMAL(8,2));
+INSERT INTO bestellungen (kunde_id, datum, betrag) VALUES (1,'2026-11-02',120.50), (2,'2026-11-03',980.00), (3,'2026-11-05',45.90),
+  (1,'2026-11-06',77.10), (4,'2026-11-07',230.00), (6,'2026-11-08',19.99);
+SQL
+`;
 const MISSIONS = [
 {
   id: "m-disk", level: 1, title: "Die Platte läuft voll",
@@ -477,6 +496,105 @@ curl -s --max-time 3 localhost:8095 | grep -qi nginx || { echo "❌ Unter localh
 RP=$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' shop)
 [ "$RP" = always ] || [ "$RP" = unless-stopped ] || { echo "❌ Der Container startet nach einem Neustart nicht automatisch (Restart-Policy: $RP)."; exit 1; }
 echo "✅ Der Shop ist erreichbar und überlebt auch einen Neustart."`,
+},
+/* ---------- Teil 8 · Datenbanken (topic "db" → Station ④ Störfall im Lernpfad) ---------- */
+{
+  id: "mdb-access", topic: "db", level: 1, title: "🗄️ Access denied",
+  story: `Die Shop-Anwendung auf diesem Server zeigt nur noch eine Fehlerseite. Im Log steht: <i>„Access denied for user 'shop'@'localhost' to database 'shop'“</i>.
+    Der Kollege, der den Datenbank-Benutzer gestern angelegt hat, ist im Urlaub. Mit <code>shop-check</code> kannst du selbst testen, was die Anwendung macht.
+    (Das Vorbereiten installiert MariaDB – etwa eine Minute.)`,
+  goal: `<code>shop-check</code> läuft ohne Fehler. Der Datenbank-Benutzer <code>shop</code> bekommt dabei <b>nur</b> Rechte auf die Datenbank <code>shop</code> – keine Rechte auf alle Datenbanken (<code>*.*</code>).`,
+  hints: [`Führe <code>shop-check</code> aus und lies die Fehlermeldung genau.`,
+          `Welche Rechte hat der Benutzer? <code>sudo mariadb -e "SHOW GRANTS FOR 'shop'@'localhost';"</code> – schau dir den Datenbanknamen genau an.`,
+          `Rechte vergibst du mit <code>GRANT SELECT, INSERT, UPDATE, DELETE ON shop.* TO 'shop'@'localhost';</code>. Das falsche Recht kannst du mit <code>REVOKE … ON shopp.* FROM …</code> wieder entfernen.`],
+  solution: `<code>SHOW GRANTS</code> zeigt Rechte auf <code>shopp.*</code> (Tippfehler). → <code>sudo mariadb -e "GRANT SELECT, INSERT, UPDATE, DELETE ON shop.* TO 'shop'@'localhost';"</code> (sauber: zusätzlich <code>REVOKE ALL PRIVILEGES ON shopp.* FROM 'shop'@'localhost';</code>)`,
+  test: `mariadb -e "GRANT SELECT, INSERT, UPDATE, DELETE ON shop.* TO 'shop'@'localhost';"`,
+  setup: NEED_MARIADB + SHOP_DB + `
+mariadb -e "DROP USER IF EXISTS 'shop'@'localhost'; CREATE USER 'shop'@'localhost' IDENTIFIED BY 'Shop_2026'; GRANT SELECT, INSERT, UPDATE, DELETE ON shopp.* TO 'shop'@'localhost';"
+cat > /usr/local/bin/shop-check <<'EOF'
+#!/bin/bash
+# So greift die Shop-Anwendung auf ihre Datenbank zu
+mariadb -u shop -pShop_2026 shop -e "SELECT COUNT(*) AS bestellungen FROM bestellungen;"
+EOF
+chmod 755 /usr/local/bin/shop-check
+echo ok`,
+  verify: `command -v mariadb >/dev/null || { echo "❌ MariaDB ist nicht installiert."; exit 1; }
+out=$(sudo -u ubuntu /usr/local/bin/shop-check 2>&1) || { echo "❌ shop-check scheitert noch: $(echo "$out" | tail -1)"; exit 1; }
+if mariadb -N -e "SHOW GRANTS FOR 'shop'@'localhost'" | grep 'ON \\*\\.\\*' | grep -vq '^GRANT USAGE'; then
+  echo "⚠️ shop-check läuft – aber der Benutzer shop hat jetzt Rechte auf ALLE Datenbanken (*.*). Gib ihm nur Rechte auf shop.*"; exit 1
+fi
+echo "✅ Die Anwendung kommt wieder an ihre Datenbank – mit genau den nötigen Rechten."`,
+},
+{
+  id: "mdb-start", topic: "db", level: 2, title: "🗄️ MariaDB startet nicht mehr",
+  story: `Ein Kollege hat am Wochenende einen Blogartikel über Datenbank-Tuning gelesen und „nur ein paar Einstellungen verbessert“. Seit dem Neustart ist der Datenbankdienst weg – und mit ihm der Shop.`,
+  goal: `MariaDB läuft wieder und die Datenbank <code>shop</code> ist erreichbar. Die <b>gewollten</b> Tuning-Einstellungen des Kollegen sollen erhalten bleiben – korrigiere nur, was kaputt ist.`,
+  hints: [`<code>systemctl status mariadb</code> zeigt, dass der Dienst nicht läuft. Warum, steht im Journal: <code>sudo journalctl -u mariadb -n 30</code>`,
+          `Die Fehlermeldung nennt eine unbekannte Einstellung. Wo steht sie? <code>sudo grep -rn sizee /etc/mysql/</code>`,
+          `Datei mit <code>sudo nano</code> korrigieren (Tippfehler im Namen), dann <code>sudo systemctl restart mariadb</code>.`],
+  solution: `Im Journal: <i>unknown variable 'query_cache_sizee=16M'</i>. In <code>/etc/mysql/mariadb.conf.d/60-tuning.cnf</code> den Tippfehler zu <code>query_cache_size</code> korrigieren → <code>sudo systemctl restart mariadb</code>. Die Datei nicht einfach löschen, sonst ist <code>max_connections = 200</code> weg.`,
+  test: `sed -i 's/query_cache_sizee/query_cache_size/' /etc/mysql/mariadb.conf.d/60-tuning.cnf; systemctl restart mariadb`,
+  setup: NEED_MARIADB + SHOP_DB + `
+cat > /etc/mysql/mariadb.conf.d/60-tuning.cnf <<'EOF'
+# Tuning nach Blogartikel – Kollege M., 08.11.
+[mysqld]
+max_connections         = 200
+innodb_buffer_pool_size = 256M
+query_cache_sizee       = 16M
+EOF
+systemctl restart mariadb >/dev/null 2>&1 || true
+echo ok`,
+  verify: `systemctl is-active --quiet mariadb || { echo "❌ MariaDB läuft nicht (systemctl is-active mariadb)."; exit 1; }
+mariadb -N -e "SELECT COUNT(*) FROM shop.bestellungen" >/dev/null 2>&1 || { echo "❌ MariaDB läuft, aber die Datenbank shop ist nicht erreichbar."; exit 1; }
+v=$(mariadb -N -e "SELECT @@max_connections")
+[ "$v" = 200 ] || { echo "⚠️ MariaDB läuft – aber max_connections ist $v statt 200. Die Tuning-Datei wurde gelöscht oder entschärft: korrigiere nur den Fehler."; exit 1; }
+echo "✅ MariaDB läuft wieder, und die gewollten Einstellungen sind erhalten."`,
+},
+{
+  id: "mdb-index", topic: "db", level: 2, title: "🗄️ Die Auswertung dauert ewig",
+  story: `Der Vertrieb beschwert sich: Die Auswertung „Was hat Kunde 4711 gemacht?“ braucht Sekunden, und bei mehreren Nutzern gleichzeitig hängt der ganze Shop. Die Abfrage dahinter:
+    <code>SELECT COUNT(*) FROM shop.logbuch WHERE kunde_id = 4711;</code> – die Tabelle hat 200.000 Zeilen.`,
+  goal: `Sorge dafür, dass MariaDB diese Abfrage über einen <b>Index</b> beantwortet statt jede Zeile zu lesen. Die Daten im Logbuch müssen vollständig bleiben.`,
+  hints: [`<code>EXPLAIN</code> vor einer Abfrage zeigt, wie MariaDB sie ausführt: <code>sudo mariadb shop -e "EXPLAIN SELECT COUNT(*) FROM logbuch WHERE kunde_id = 4711;"</code>`,
+          `<code>type: ALL</code> heißt: komplette Tabelle durchsuchen (Full Table Scan). In der Spalte <code>key</code> steht <code>NULL</code> – es gibt keinen passenden Index.`,
+          `<code>CREATE INDEX idx_kunde ON logbuch (kunde_id);</code> – danach noch einmal <code>EXPLAIN</code>.`],
+  solution: `<code>sudo mariadb shop -e "CREATE INDEX idx_kunde ON logbuch (kunde_id);"</code> – danach zeigt <code>EXPLAIN</code> den Index in der Spalte <code>key</code> und nur noch wenige Zeilen.`,
+  test: `mariadb shop -e "CREATE INDEX idx_kunde ON logbuch (kunde_id);"`,
+  setup: NEED_MARIADB + SHOP_DB + `
+mariadb shop <<'SQL'
+CREATE TABLE logbuch (id INT AUTO_INCREMENT PRIMARY KEY, kunde_id INT, zeit DATETIME, aktion VARCHAR(20));
+INSERT INTO logbuch (kunde_id, zeit, aktion)
+  SELECT seq % 5000, TIMESTAMP('2026-11-08 23:59:00') - INTERVAL seq MINUTE, ELT(1 + seq % 3, 'login', 'suche', 'kauf')
+  FROM seq_1_to_200000;
+SQL
+echo ok`,
+  verify: `n=$(mariadb -N -e "SELECT COUNT(*) FROM shop.logbuch" 2>/dev/null) || { echo "❌ Die Tabelle shop.logbuch fehlt."; exit 1; }
+[ "$n" = 200000 ] || { echo "❌ Im Logbuch stehen $n statt 200000 Zeilen – Daten löschen ist keine Lösung."; exit 1; }
+k=$(mariadb -N shop -e "EXPLAIN SELECT COUNT(*) FROM logbuch WHERE kunde_id = 4711" | awk -F'\\t' '{print $6}')
+[ -n "$k" ] && [ "$k" != NULL ] || { echo "❌ EXPLAIN zeigt noch keinen Index (key = NULL) – MariaDB liest die ganze Tabelle."; exit 1; }
+echo "✅ Die Abfrage nutzt jetzt den Index $k."`,
+},
+{
+  id: "mdb-restore", topic: "db", level: 3, title: "🗄️ Tabelle weg – aber nur die!",
+  story: `Montag, 9:12 Uhr. Ein Werkstudent wollte „nur kurz aufräumen“ und hat in der Datenbank <code>shop</code> die Tabelle <code>kunden</code> gelöscht. Zum Glück gibt es die nächtliche Sicherung unter <code>/var/backups/db/</code>.
+    Aber Vorsicht: Seit der Sicherung um 2 Uhr sind schon neue Bestellungen eingegangen.`,
+  goal: `Die Tabelle <code>kunden</code> ist wieder vollständig da (6 Kunden). Die Tabelle <code>bestellungen</code> behält <b>alle</b> Bestellungen – auch die von heute.`,
+  hints: [`<code>ls -l /var/backups/db/</code> und <code>head -40</code> auf die Sicherung: Was steht da drin?`,
+          `Die Sicherung enthält für jede Tabelle <code>DROP TABLE</code> und <code>CREATE TABLE</code>. Spielst du sie komplett ein, wird auch <code>bestellungen</code> auf den Stand von 2 Uhr zurückgesetzt.`,
+          `Sicherer Weg: In eine leere Hilfsdatenbank einspielen (<code>CREATE DATABASE wiederherstellung;</code> + <code>mariadb wiederherstellung &lt; datei.sql</code>) und von dort nur <code>kunden</code> zurückkopieren: <code>CREATE TABLE shop.kunden LIKE …; INSERT INTO shop.kunden SELECT * FROM …;</code>`],
+  solution: `<code>sudo mariadb -e "CREATE DATABASE wiederherstellung;"</code> → <code>sudo mariadb wiederherstellung &lt; /var/backups/db/shop-2026-11-09.sql</code> → <code>sudo mariadb -e "CREATE TABLE shop.kunden LIKE wiederherstellung.kunden; INSERT INTO shop.kunden SELECT * FROM wiederherstellung.kunden; DROP DATABASE wiederherstellung;"</code>`,
+  test: `mariadb -e "CREATE DATABASE wiederherstellung;"; mariadb wiederherstellung < /var/backups/db/shop-2026-11-09.sql; mariadb -e "CREATE TABLE shop.kunden LIKE wiederherstellung.kunden; INSERT INTO shop.kunden SELECT * FROM wiederherstellung.kunden; DROP DATABASE wiederherstellung;"`,
+  setup: NEED_MARIADB + SHOP_DB + `
+mkdir -p /var/backups/db
+mariadb-dump shop > /var/backups/db/shop-2026-11-09.sql
+touch -d '2026-11-09 02:00' /var/backups/db/shop-2026-11-09.sql
+mariadb shop -e "INSERT INTO bestellungen (kunde_id, datum, betrag) VALUES (5,'2026-11-09',310.00), (2,'2026-11-09',64.80), (4,'2026-11-09',12.50); DROP TABLE kunden;"
+echo ok`,
+  verify: `k=$(mariadb -N -e "SELECT COUNT(*) FROM shop.kunden" 2>/dev/null) || { echo "❌ Die Tabelle shop.kunden fehlt noch."; exit 1; }
+[ "$k" = 6 ] || { echo "❌ In kunden stehen $k statt 6 Zeilen."; exit 1; }
+b=$(mariadb -N -e "SELECT COUNT(*) FROM shop.bestellungen" 2>/dev/null)
+[ "$b" = 9 ] || { echo "❌ kunden ist zurück – aber in bestellungen stehen nur noch \${b:-0} statt 9 Zeilen. Die Bestellungen von heute sind weg: Wer die ganze Sicherung einspielt, überschreibt neuere Daten."; exit 1; }
+echo "✅ kunden ist wiederhergestellt, und keine Bestellung von heute ging verloren."`,
 },
 /* ---------- PowerShell-Kurs (track: windows) – du arbeitest als ubuntu in PowerShell, geprüft wird von außen ---------- */
 {

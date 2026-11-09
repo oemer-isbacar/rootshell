@@ -6,6 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { StringDecoder } = require("string_decoder");
 const { WebSocketServer } = require("ws");
+const vmSandbox = require("vm");
 const { Client } = require("ssh2");
 const vmctl = require("./vmctl");
 const sandbox = require("./sandbox");
@@ -18,9 +19,24 @@ const MIME = {
   ".wasm": "application/wasm", ".bin": "application/octet-stream", ".json": "application/json",
   ".yaml": "text/plain; charset=utf-8", ".svg": "image/svg+xml", ".ico": "image/x-icon",
 };
-const PUBLIC = ["index.html", "app.js", "lessons.js", "lessons-ps.js", "lessons-win.js", "lessons-script.js", "lessons-sec.js", "lessons-net.js", "lessons-devops.js", "quiz.js", "wargame.js", "drills.js", "missions.js", "style.css", "fis-lab.yaml", "lib/", "vm/"];
+const PUBLIC = ["index.html", "app.js", "topics.js", "lessons.js", "lessons-ps.js", "lessons-win.js", "lessons-script.js", "lessons-sec.js", "lessons-net.js", "lessons-devops.js", "lessons-db.js", "sql-cases.js", "quiz.js", "wargame.js", "drills.js", "missions.js", "style.css", "fis-lab.yaml", "lib/", "vm/"];
 const HOSTS = new Set([`localhost:${PORT}`, `127.0.0.1:${PORT}`]);
 const ORIGINS = new Set([...HOSTS].map((h) => "http://" + h));
+
+/* Lektionen serverseitig laden (wie im Browser, in Reihenfolge aus index.html) – nur um prep-Skripte
+ * vordefinierter Übungen zu finden. Der Browser schickt nur die Lektions-ID, nie ein Skript. */
+let lessonCache = null;
+function lessons() {
+  if (lessonCache) return lessonCache;
+  const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8");
+  // alle Inhaltsdateien (Lektionsdateien hängen auch Trainingskarten an DRILLS an) – ohne Bibliotheken und app.js
+  const files = [...html.matchAll(/<script src="([^"]+)"><\/script>/g)].map((m) => m[1]).filter((s) => !s.startsWith("lib/") && s !== "app.js");
+  const ctx = { window: {}, console };
+  ctx.window.window = ctx.window;
+  vmSandbox.createContext(ctx);
+  for (const f of files) vmSandbox.runInContext(fs.readFileSync(path.join(ROOT, f), "utf8"), ctx, { filename: f });
+  return (lessonCache = ctx.window.LESSONS || []);
+}
 
 function sendJson(res, code, obj) {
   const body = JSON.stringify(obj);
@@ -52,10 +68,17 @@ async function api(req, res, p) {
     if (p === "api/install/multipass") return sendJson(res, 200, vmctl.actions.installMultipass());
     if (p === "api/install/hyperv") return sendJson(res, 200, vmctl.actions.enableHyperV());
     if (p === "api/vm/prepare-ssh") {
-      const e = await vmctl.env();
-      if (!e.vm || e.vm.state !== "Running" || !e.vm.ip) return sendJson(res, 409, { error: "Die VM läuft nicht." });
-      const r = await vmctl.ensureKey();
-      return sendJson(res, 200, { ok: r.ok, host: e.vm.ip, username: "ubuntu", pwsh: r.pwsh, error: r.ok ? undefined : r.stderr.slice(0, 300) });
+      const prof = vmctl.profile(body.vm);
+      const v = (await vmctl.env()).vms[prof.id].vm;
+      if (!v || v.state !== "Running" || !v.ip) return sendJson(res, 409, { error: `Die ${prof.label} läuft nicht.` });
+      const r = await vmctl.ensureKey(prof.id);
+      return sendJson(res, 200, { ok: r.ok, vm: prof.id, host: v.ip, username: "ubuntu", pwsh: r.pwsh, error: r.ok ? undefined : r.stderr.slice(0, 300) });
+    }
+    if (p === "api/vm/prepare") {
+      // Übung vorbereiten: Übungs-VM auf „basis“ zurücksetzen, dann das prep-Skript der Lektion ausführen
+      const l = lessons().find((x) => x.id === body.lesson);
+      if (!l || l.vm !== "uebung") return sendJson(res, 404, { error: "Keine Übung mit dieser ID." });
+      return sendJson(res, 200, vmctl.prepareJob("Übung vorbereiten", l.prep || "", `„${l.title}“ wird vorbereitet …`));
     }
     const mm = p.match(/^api\/mission\/([\w-]+)\/(setup|verify)$/);
     if (mm) {
@@ -76,13 +99,9 @@ async function api(req, res, p) {
         const r = await sandbox.exec(mission.verify, 60000);
         return sendJson(res, 200, { ok: r.ok, output: r.output.slice(-2000) });
       }
-      if (mm[2] === "setup") {
-        return sendJson(res, 200, vmctl.newJob("Mission vorbereiten", [
-          vmctl.scriptStep(mission.setup, "Szenario wird in der VM vorbereitet …"),
-          async (job) => { job.log += "\n✅ Bereit – leg los!\n"; return true; },
-        ]));
-      }
-      const r = await vmctl.execScript(mission.verify, 60000);
+      // Linux-Missionen laufen in der Übungs-VM – vorher zurück auf „basis“, damit dein Server unberührt bleibt
+      if (mm[2] === "setup") return sendJson(res, 200, vmctl.prepareJob("Mission vorbereiten", mission.setup, "Szenario wird in der Übungs-VM vorbereitet …"));
+      const r = await vmctl.execScript(mission.verify, 60000, "uebung");
       return sendJson(res, 200, { ok: r.ok, output: (r.stdout + r.stderr).trim().slice(-2000) });
     }
     return sendJson(res, 404, { error: "unbekannt" });
