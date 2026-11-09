@@ -65,8 +65,26 @@ async function sh(cmd, ip) {
   return (r.stdout + r.stderr).replace(/\r/g, "");
 }
 
+/* Eine PowerShell-Lektion in einer pwsh-Sitzung ausführen; liefert die Ausgabe je Befehl ("schritt_befehl") */
+async function runPsLesson(l, ip) {
+  const parts = ["$ProgressPreference = 'SilentlyContinue'", "Set-Location ~"];
+  l.steps.forEach((s, i) => {
+    if (!s.cmd || !s.check || s.task) return;
+    [].concat(s.cmd).forEach((c, j) => {
+      parts.push(`Write-Output "__S__${i}_${j}__"`, `try { . {\n${c.replace(/\{\{IP\}\}/g, ip)}\n} 2>&1 | Out-String -Width 160 -Stream } catch { $_ | Out-String -Width 160 }`, `Write-Output "__E__${i}_${j}__"`);
+    });
+  });
+  const b64 = Buffer.from(parts.join("\n")).toString("base64");
+  const r = await vmctl.mp(["exec", PROF.name, "--", "sudo", "-u", "ubuntu", "-H", "bash", "-c",
+    `echo ${b64} | base64 -d > /tmp/.rs_lesson.ps1 && cd ~ && pwsh -NoLogo -NoProfile -NonInteractive -File /tmp/.rs_lesson.ps1 2>&1`], { timeout: 900000 });
+  const all = (r.stdout + r.stderr).replace(/\r/g, "");
+  const out = {};
+  for (const m of all.matchAll(/__S__(\d+_\d+)__\n([\s\S]*?)__E__\1__/g)) out[m[1]] = m[2];
+  return out;
+}
+
 (async () => {
-  const list = LESSONS.filter((l) => l.mode === "ssh" && (ids.includes(l.id) || (group && l.group === group)));
+  const list = LESSONS.filter((l) => (l.mode === "ssh" || l.mode === "ps") && (ids.includes(l.id) || (group && l.group === group)));
   if (!list.length) { console.error("Keine passenden Lektionen (Lektions-IDs oder --group angeben)."); process.exit(2); }
   const VMID = vi >= 0 ? args[vi + 1] : list[0].vm || "server";
   PROF = vmctl.profile(VMID);
@@ -95,12 +113,14 @@ async function sh(cmd, ip) {
         console.log(`   ${p.ok ? "OK  " : "FAIL"} prep (Übung vorbereiten)`);
         if (!p.ok) { failed++; console.log("        " + (p.stdout + p.stderr).trim().slice(-300)); continue; }
       }
+      // PowerShell-Lektionen: alle Befehle in EINER pwsh-Sitzung (Variablen/Funktionen bleiben wie im Terminal erhalten)
+      const psOut = l.mode === "ps" ? await runPsLesson(l, ip) : null;
       for (const [i, s] of l.steps.entries()) {
         if (!s.cmd || !s.check || s.task) { console.log(`   –   ${i + 1}. ${s.title} (übersprungen)`); continue; }
         total++;
         let ok = false, last = "";
-        for (const c of [].concat(s.cmd)) {
-          const out = await sh(c, ip);
+        for (const [j, c] of [].concat(s.cmd).entries()) {
+          const out = psOut ? (psOut[`${i}_${j}`] ?? "(keine Ausgabe – Sitzung abgebrochen?)") : await sh(c, ip);
           last = out;
           if (runCheck(s.check, c.replace(/\{\{IP\}\}/g, ip), out)) ok = true;
         }

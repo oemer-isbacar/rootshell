@@ -4,7 +4,7 @@
  */
 window.LESSONS.push(
 {
-  id: "w1-start", mode: "win", group: "win", title: "Willkommen im echten Windows",
+  id: "w1-start", mode: "win", topic: "ps", stage: 3, group: "win", title: "Willkommen im echten Windows",
   intro: `Links läuft jetzt die <b>Windows PowerShell 5.1</b> in einem echten Windows 11 – der <b>Windows-Sandbox</b>. Du bist dort Administrator und darfst alles ausprobieren: Beim Beenden wird die Sandbox komplett gelöscht, dein PC bleibt unberührt. Neben dem Terminal öffnet sich ein Sandbox-Fenster – das kannst du minimieren.`,
   steps: [
     { title: "Welche PowerShell?", cmd: "$PSVersionTable.PSVersion", check: { cmd: /\$PSVersionTable/i, out: /Major/ },
@@ -19,7 +19,7 @@ window.LESSONS.push(
   ],
 },
 {
-  id: "w2-services", mode: "win", group: "win", title: "Dienste verwalten",
+  id: "w2-services", mode: "win", topic: "ps", stage: 3, group: "win", title: "Dienste verwalten",
   intro: `Dienste sind Programme, die im Hintergrund laufen – Druckwarteschlange, Windows Update, Webserver, Datenbank. Als Admin startest, stoppst und konfigurierst du sie ständig. Unser Versuchskaninchen: die <b>Druckwarteschlange</b> (<code>Spooler</code>).`,
   steps: [
     { title: "Wie viele Dienste laufen?", cmd: "Get-Service | Where-Object Status -eq Running | Measure-Object", check: { cmd: /get-service/i, out: /Count/ } },
@@ -38,7 +38,7 @@ window.LESSONS.push(
   ],
 },
 {
-  id: "w3-users", mode: "win", group: "win", title: "Lokale Benutzer & Gruppen",
+  id: "w3-users", mode: "win", topic: "ps", stage: 3, group: "win", title: "Lokale Benutzer & Gruppen",
   intro: `Ohne Active Directory verwaltet jeder Windows-Rechner seine eigenen <b>lokalen</b> Benutzer und Gruppen – typisch für Arbeitsgruppen, Kiosk-PCs oder Server außerhalb der Domäne. Die Cmdlets dafür heißen <code>*-LocalUser</code> und <code>*-LocalGroup*</code>.`,
   steps: [
     { title: "Wer existiert?", cmd: "Get-LocalUser", check: { cmd: /get-localuser/i, out: /WDAGUtilityAccount/ } },
@@ -57,7 +57,7 @@ window.LESSONS.push(
   ],
 },
 {
-  id: "w4-ntfs", mode: "win", group: "win", title: "NTFS-Rechte & Freigaben",
+  id: "w4-ntfs", mode: "win", topic: "ps", stage: 3, group: "win", title: "NTFS-Rechte & Freigaben",
   intro: `Ein Abteilungsordner auf dem Dateiserver – <b>der</b> Klassiker in der FISI-Prüfung. Zwei Ebenen schützen ihn: die <b>NTFS-Rechte</b> auf dem Ordner und die <b>Freigabe-Rechte</b> im Netzwerk.`,
   steps: [
     { title: "Ordner und Gruppe anlegen", cmd: ["New-Item C:\\Daten\\Vertrieb -ItemType Directory -Force", "New-LocalGroup -Name Vertrieb -ErrorAction SilentlyContinue"],
@@ -75,7 +75,7 @@ window.LESSONS.push(
   ],
 },
 {
-  id: "w5-registry", mode: "win", group: "win", title: "Die Registry",
+  id: "w5-registry", mode: "win", topic: "ps", stage: 3, group: "win", title: "Die Registry",
   intro: `Die Registry ist die zentrale Konfigurationsdatenbank von Windows. In PowerShell bewegst du dich darin wie in Ordnern: <code>HKLM:</code> (ganzer Rechner) und <code>HKCU:</code> (aktueller Benutzer).`,
   steps: [
     { title: "Windows-Version auslesen", cmd: `Get-ItemProperty "HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion" | Select-Object ProductName, DisplayVersion, CurrentBuild`,
@@ -93,7 +93,7 @@ window.LESSONS.push(
   ],
 },
 {
-  id: "w6-events", mode: "win", group: "win", title: "Ereignisanzeige & Protokolle",
+  id: "w6-events", mode: "win", topic: "ps", stage: 3, group: "win", title: "Ereignisanzeige & Protokolle",
   intro: `Wenn etwas schiefgeht, steht die Ursache meist in der <b>Ereignisanzeige</b>. Mit PowerShell durchsuchst du sie viel schneller als mit der Maus – auch auf vielen Servern gleichzeitig.`,
   steps: [
     { title: "Welche Protokolle gibt es?", cmd: "Get-WinEvent -ListLog Application, System, Security", check: { cmd: /-listlog/i, out: /RecordCount/ } },
@@ -111,7 +111,7 @@ window.LESSONS.push(
   ],
 },
 {
-  id: "w7-net", mode: "win", group: "win", title: "Netzwerk & Firewall",
+  id: "w7-net", mode: "win", topic: "ps", stage: 3, group: "win", title: "Netzwerk & Firewall",
   intro: `<code>ipconfig</code>, <code>ping</code> und <code>nslookup</code> kennst du vielleicht – die PowerShell-Gegenstücke liefern Objekte und können mehr. Dazu: die Windows-Firewall per Befehl steuern.`,
   steps: [
     { title: "Netzwerkadapter", cmd: "Get-NetAdapter | Select-Object Name, Status, LinkSpeed, MacAddress", check: { cmd: /get-netadapter/i, out: /Up/ } },
@@ -130,7 +130,7 @@ window.LESSONS.push(
   ],
 },
 {
-  id: "w8-tasks", mode: "win", group: "win", title: "Skripte & geplante Aufgaben",
+  id: "w8-tasks", mode: "win", topic: "ps", stage: 3, group: "win", title: "Skripte & geplante Aufgaben",
   intro: `Zum Schluss automatisierst du eine Inventur: ein Skript, das regelmäßig Infos sammelt, und eine geplante Aufgabe, die es jeden Morgen startet.`,
   steps: [
     { title: "Skript anlegen", cmd: ["New-Item C:\\Skripte -ItemType Directory -Force | Out-Null",

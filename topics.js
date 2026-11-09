@@ -8,4 +8,7 @@ window.TOPICS = [
   { id: "sec", title: "IT-Security" },
   { id: "devops", title: "Git, Docker & Selbst hosten" },
   { id: "db", title: "Datenbanken" },
+  // Windows-Kurs: PowerShell 7 in der Übungs-VM, angewendet in der echten Windows-Sandbox
+  { id: "ps", title: "PowerShell & Windows-Verwaltung" },
+  { id: "ps-script", title: "PowerShell-Skripte" },
 ];
