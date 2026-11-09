@@ -37,8 +37,11 @@ Eine neue `lessons-*.js` muss in `index.html` (Reihenfolge = Reihenfolge im Kurs
 ```js
 window.LESSONS.push({
   id: "net9-beispiel",            // eindeutig
-  mode: "ssh",                    // "browser" (Mini-Linux) | "ssh" (Ubuntu-VM) | "ps" (PowerShell 7) | "win" (Sandbox)
+  mode: "ssh",                    // "browser" (Mini-Linux) | "sql" (SQL-Konsole) | "ssh" (Ubuntu-VM) | "ps" (PowerShell 7) | "win" (Sandbox)
   group: "net",                   // Teil-Überschrift, siehe GROUPS in app.js
+  topic: "net", stage: 2,         // Lernpfad: Thema aus topics.js, Stufe 1 Lernen | 2 Üben | 3 Anwenden
+  vm: "uebung",                   // bei ssh/ps: "uebung" (Stufe 2, Wegwerf) | "server" (Stufe 3, bleibt)
+  prep: `apt-get install -y -qq ipcalc`, // optional: läuft als root nach dem Zurücksetzen (Übungs-VM) bzw. als sh im Mini-Linux
   title: "Kurzer Titel",
   intro: `Ein, zwei Sätze: Worum geht es, warum ist das wichtig?`,
   steps: [
@@ -59,7 +62,11 @@ window.LESSONS.push({
 - `out` auf die Ausgabe passt (optional) und `notOut` nicht,
 - und keine typische Fehlermeldung in der Ausgabe steht (`Permission denied`, `command not found` …). Soll genau so ein Fehler gezeigt werden, muss `out` ihn treffen.
 
-Tipps: Regex großzügig schreiben (`apt(-get)?`, `\s+`), Ausgaben prüfen, die es auf jedem System gibt. `{{IP}}` wird durch die IP der Übungs-VM ersetzt. Schritte ohne `check` bekommen einen „Erledigt“-Knopf.
+Tipps: Regex großzügig schreiben (`apt(-get)?`, `\s+`), Ausgaben prüfen, die es auf jedem System gibt. `{{IP}}` wird durch die IP der aktiven VM ersetzt. Schritte ohne `check` bekommen einen „Erledigt“-Knopf.
+
+**Übungen in der Übungs-VM** (`vm: "uebung"`) müssen für sich allein laufen – „Übung vorbereiten“ setzt die VM vorher auf „basis“ zurück. Was eine Übung voraussetzt (Ordner, Repos, Pakete), stellt `prep` her. Prüfen: `npm run test:vm-lessons -- --vm uebung --reset-each <ids>`.
+
+**SQL-Lektionen** (`mode: "sql"`) nennen ihre Datenbank mit `db: "krimi1"` (SQL-Text in `sql-cases.js`). Die Lösung eines Schritts steht in `solution` (hinter „Lösung zeigen“). Offene Fälle prüfen mit einer Funktion (`check: (cmd, out) => …`) und hinterlegen eine geheime `testSolution`, die nur der Test nutzt. Nur SQL verwenden, das in SQLite und MariaDB gleich funktioniert. `npm test` führt jede Musterlösung gegen die Fall-Datenbank aus.
 
 ## Trainingskarte
 

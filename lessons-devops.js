@@ -3,6 +3,31 @@
  * Baut auf „Container: Docker" (v14-docker) auf, ist aber auch ohne diese Lektion machbar.
  */
 window.LESSONS.push(
+/* ① Lernen im Mini-Linux: Versionen von Hand mit diff und patch – die Idee hinter Git, ohne Git */
+{
+  id: "dev0-mini", mode: "browser", group: "devops", topic: "devops", stage: 1, title: "Versionen verstehen: diff & patch im Mini-Linux",
+  intro: `Jeder Admin kennt Dateien wie <code>app.conf.alt</code>, <code>app.conf.alt2</code>, <code>app.conf.funktioniert</code>. Bevor du <b>Git</b> lernst, machst du hier von Hand, was Git automatisch tut:
+    einen Stand sichern, Änderungen sichtbar machen und eine Änderung als <b>Patch</b> speichern und woanders einspielen. Das Mini-Linux hat kein Git – <code>diff</code> und <code>patch</code> reichen für die Idee.`,
+  steps: [
+    { title: "Eine Konfiguration und ihr Sicherungsstand",
+      cmd: `mkdir -p ~/versionen && cd ~/versionen && printf "port=80\\nuser=www\\nlog=off\\n" > app.conf && cp app.conf app.conf.v1 && ls`,
+      check: { cmd: /cp\s+app\.conf\s+app\.conf\.v1/, out: /app\.conf\.v1/ } },
+    { title: "Etwas ändern", text: `Port auf 8080 und Logging an:`,
+      cmd: `cd ~/versionen && sed -i "s/port=80/port=8080/; s/log=off/log=on/" app.conf && cat app.conf`,
+      check: { cmd: /sed\s+-i/, out: /port=8080[\s\S]*log=on/ } },
+    { title: "Was genau hat sich geändert?", text: `<code>diff -u</code> zeigt die Unterschiede im <b>Unified-Format</b>: <code>-</code> = Zeile entfernt, <code>+</code> = Zeile hinzugefügt, ohne Zeichen = unverändert (Kontext).`,
+      cmd: "cd ~/versionen && diff -u app.conf.v1 app.conf", check: { cmd: /diff\s+-u/, out: /^\+port=8080/m },
+      explain: `Genau dieses Format zeigt dir später <code>git diff</code> – und GitHub, wenn jemand einen Pull Request stellt.` },
+    { title: "Die Änderung als Patch speichern", text: `Ein <b>Patch</b> ist nur die Änderung, nicht die ganze Datei – klein genug für eine Mail oder ein Ticket.`,
+      cmd: "cd ~/versionen && diff -u app.conf.v1 app.conf > aenderung.patch; cat aenderung.patch",
+      check: { cmd: /aenderung\.patch/, out: /@@/ } },
+    { title: "Den Patch woanders einspielen", text: `Ein zweiter Server hat noch den alten Stand. <code>patch</code> bringt ihn auf den neuen – ohne dass du die Datei von Hand bearbeitest:`,
+      cmd: "cd ~/versionen && cp app.conf.v1 server2.conf && patch server2.conf < aenderung.patch && cat server2.conf",
+      check: { cmd: /patch\s+server2\.conf/, out: /port=8080[\s\S]*log=on/ },
+      explain: `<b>Das ist Git im Kern:</b> Ein <i>Commit</i> ist ein gespeicherter Stand mit Autor, Zeit und Nachricht; Git berechnet Diffs selbst, verwaltet viele Stände nebeneinander (<i>Branches</i>)
+        und führt Änderungen zusammen (<i>Merge</i>). Weiter geht es mit echtem Git in der 🧪 Übungs-VM.` },
+  ],
+},
 {
   id: "dev1-git", mode: "ssh", vm: "uebung", topic: "devops", stage: 2, group: "devops", title: "Git: Versionen verwalten",
   intro: `Git speichert jeden Stand deiner Dateien als <b>Commit</b>. Admins versionieren damit Skripte und Konfigurationen: Wer hat was wann geändert, und wie komme ich zum letzten funktionierenden Stand zurück?`,

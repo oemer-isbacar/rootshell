@@ -270,6 +270,8 @@ const actions = {
       pauseOtherStep(p),
       mpStep(["launch", "24.04", "--name", p.name, "--cpus", String(p.cpus), "--memory", p.mem, "--disk", p.disk, "--cloud-init", cloudInit(p), "--timeout", "1200"],
         `Ubuntu 24.04 herunterladen und ${p.label} starten (beim ersten Mal einige Minuten) …`),
+      // Übungs-VM: PowerShell 7 gleich in den Basis-Snapshot – sonst installiert jede PowerShell-Übung es nach dem Zurücksetzen neu
+      ...(p.id === "uebung" ? [scriptStep("snap install powershell --classic 2>&1 | tail -1", "PowerShell 7 für die Windows-Übungen installieren (ca. 1 Minute) …", p.id)] : []),
       logStep(`\n▶ Sicherungspunkt „${p.base}“ anlegen …\n`),
       mpStep(["stop", p.name]), mpStep(["snapshot", p.name, "--name", p.base, "--comment", p.baseComment]), mpStep(["start", p.name]),
       logStep(`\n✅ Fertig! Die ${p.label} läuft.\n`),
