@@ -19,7 +19,7 @@ const MIME = {
   ".wasm": "application/wasm", ".bin": "application/octet-stream", ".json": "application/json",
   ".yaml": "text/plain; charset=utf-8", ".svg": "image/svg+xml", ".ico": "image/x-icon",
 };
-const PUBLIC = ["index.html", "app.js", "topics.js", "lessons.js", "lessons-ps.js", "lessons-win.js", "lessons-script.js", "lessons-sec.js", "lessons-net.js", "lessons-devops.js", "lessons-db.js", "quiz.js", "wargame.js", "drills.js", "missions.js", "style.css", "fis-lab.yaml", "lib/", "vm/"];
+const PUBLIC = ["index.html", "app.js", "topics.js", "lessons.js", "lessons-ps.js", "lessons-win.js", "lessons-script.js", "lessons-sec.js", "lessons-net.js", "lessons-devops.js", "lessons-db.js", "sql-cases.js", "quiz.js", "wargame.js", "drills.js", "missions.js", "style.css", "fis-lab.yaml", "lib/", "vm/"];
 const HOSTS = new Set([`localhost:${PORT}`, `127.0.0.1:${PORT}`]);
 const ORIGINS = new Set([...HOSTS].map((h) => "http://" + h));
 
