@@ -17,6 +17,7 @@
     <button data-mode="ssh" title="Vollwertiges Ubuntu in einer VM – für Installationen, Dienste und Missionen">🔌 Echte VM</button>
     <button data-mode="ps" title="PowerShell 7 – läuft in deiner Übungs-VM">⚡ PowerShell 7</button>
     <button data-mode="win" title="Echtes Windows 11 in der Windows-Sandbox – wird beim Beenden gelöscht">🪟 Windows-Sandbox</button>
+    <button data-mode="sql" title="SQL-Konsole mit echter Datenbank (SQLite) – läuft komplett im Browser">🗄 SQL</button>
   </div>
   <div class="vmstatus"><span id="vm-dot" class="dot booting"></span><span id="vm-text">Linux startet …</span></div>
   <div class="actions">
@@ -42,6 +43,18 @@
 <main class="layout">
   <section class="term-pane">
     <div id="terminal"></div>
+    <div id="sqlpane" class="sqlpane">
+      <div class="sql-head"><b>🗄 SQL-Konsole</b> <span id="sql-dbname" class="muted small"></span>
+        <span class="sql-actions"><button id="sql-reset" title="Datenbank neu laden – alle Änderungen gehen verloren">↺ Datenbank zurücksetzen</button></span></div>
+      <div class="sql-body">
+        <div class="sql-schema" id="sql-schema" aria-label="Tabellen"></div>
+        <div class="sql-main">
+          <textarea id="sql-input" spellcheck="false" placeholder="SQL-Abfrage eintippen, z. B. SELECT … FROM … ;" aria-label="SQL-Abfrage"></textarea>
+          <div class="sql-run"><button id="sql-go" class="primary">▶ Ausführen</button> <span class="muted small"><kbd>Strg</kbd>+<kbd>Enter</kbd> führt aus · <kbd>Strg</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> blättert im Verlauf</span></div>
+          <div id="sql-out" class="sql-out"></div>
+        </div>
+      </div>
+    </div>
     <div class="term-hint">Klick ins Terminal, um zu tippen · <kbd>Strg</kbd>+<kbd>C</kbd> bricht ab · <kbd>Tab</kbd> vervollständigt · <kbd>↑</kbd> letzter Befehl · Kopieren: markieren, Einfügen: Rechtsklick/<kbd>Strg</kbd>+<kbd>V</kbd></div>
   </section>
 
@@ -139,7 +152,7 @@
   <form id="endday-form" method="dialog">
     <h3>🌙 Feierabend</h3>
     <p class="muted">Alles sichern und deinen PC entlasten.</p>
-    <label class="inline"><input type="checkbox" id="endday-vm" checked> Übungs-VM herunterfahren (gibt RAM &amp; CPU frei)</label>
+    <label class="inline"><input type="checkbox" id="endday-vm" checked> VMs herunterfahren (gibt RAM &amp; CPU frei)</label>
     <p class="muted small">Eine laufende Windows-Sandbox wird dabei immer beendet.</p>
     <label class="inline"><input type="checkbox" id="endday-mini" checked> Zustand des Mini-Linux speichern</label>
     <div class="dialog-actions">
@@ -171,6 +184,8 @@
 <script src="lib/xterm.js"></script>
 <script src="lib/addon-fit.js"></script>
 <script src="lib/libv86.js"></script>
+<script src="lib/sql-wasm.js"></script>
+<script src="topics.js"></script>
 <script src="lessons.js"></script>
 <script src="drills.js"></script>
 <script src="lessons-ps.js"></script>
@@ -179,6 +194,8 @@
 <script src="lessons-sec.js"></script>
 <script src="lessons-net.js"></script>
 <script src="lessons-devops.js"></script>
+<script src="sql-cases.js"></script>
+<script src="lessons-db.js"></script>
 <script src="missions.js"></script>
 <script src="quiz.js"></script>
 <script src="wargame.js"></script>

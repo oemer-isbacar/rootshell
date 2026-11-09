@@ -5,6 +5,7 @@
  *   npm run test:vm-lessons -- net1-ipv4 dev1-git     bestimmte Lektionen
  *   npm run test:vm-lessons -- --group net            eine ganze Gruppe (Teil)
  *   --snapshot   vorher sichern und danach zurückspielen (empfohlen – Lektionen installieren Software)
+ *   --vm uebung|server   in welcher VM (Standard: die VM der ersten Lektion). Übungen mit prep werden vorher vorbereitet.
  *
  * Nur für Lektionen mit mode "ssh". Schritte ohne Befehl oder mit eigener Aufgabe (task) werden übersprungen.
  */
@@ -18,7 +19,8 @@ const ROOT = path.join(__dirname, "..");
 const args = process.argv.slice(2);
 const gi = args.indexOf("--group");
 const group = gi >= 0 ? args[gi + 1] : null;
-const ids = args.filter((a, i) => !a.startsWith("--") && args[i - 1] !== "--group");
+const vi = args.indexOf("--vm");
+const ids = args.filter((a, i) => !a.startsWith("--") && args[i - 1] !== "--group" && args[i - 1] !== "--vm");
 const snapshot = args.includes("--snapshot");
 const SNAP = "vor-test";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -49,30 +51,39 @@ async function job(j) {
   for (;;) { const s = vmctl.getJob(j.id); if (s.done) { if (!s.ok) throw new Error(s.log.slice(-400)); return; } await sleep(2000); }
 }
 // Befehl als ubuntu ausführen; Arbeitsverzeichnis bleibt zwischen den Befehlen erhalten (wie in einer echten Sitzung)
+let PROF = vmctl.profile("server");
 async function sh(cmd, ip) {
-  const script = `cd "$(cat /tmp/.rs_cwd 2>/dev/null || echo ~)" 2>/dev/null || cd ~\n${cmd.replace(/\{\{IP\}\}/g, ip)}\npwd > /tmp/.rs_cwd`;
+  // ohne Terminal meldet debconf „unable to re-open stdin“ – das wäre ein Fehlalarm, in der App gibt es ein echtes Terminal
+  const script = `export DEBIAN_FRONTEND=noninteractive\ncd "$(cat /tmp/.rs_cwd 2>/dev/null || echo ~)" 2>/dev/null || cd ~\n${cmd.replace(/\{\{IP\}\}/g, ip)}\npwd > /tmp/.rs_cwd`;
   const b64 = Buffer.from(script).toString("base64");
-  const r = await vmctl.mp(["exec", vmctl.VM, "--", "sudo", "-u", "ubuntu", "-H", "bash", "-c", `echo ${b64} | base64 -d | bash 2>&1`], { timeout: 600000 });
+  const r = await vmctl.mp(["exec", PROF.name, "--", "sudo", "-u", "ubuntu", "-H", "bash", "-c", `echo ${b64} | base64 -d | bash 2>&1`], { timeout: 600000 });
   return (r.stdout + r.stderr).replace(/\r/g, "");
 }
 
 (async () => {
-  const env = await vmctl.env();
-  if (!env.vm || env.vm.state !== "Running") { console.error("Die VM fis-lab läuft nicht."); process.exit(2); }
   const list = LESSONS.filter((l) => l.mode === "ssh" && (ids.includes(l.id) || (group && l.group === group)));
   if (!list.length) { console.error("Keine passenden Lektionen (Lektions-IDs oder --group angeben)."); process.exit(2); }
+  const VMID = vi >= 0 ? args[vi + 1] : list[0].vm || "server";
+  PROF = vmctl.profile(VMID);
+  const env = (await vmctl.env()).vms[PROF.id];
+  if (!env.vm || env.vm.state !== "Running") { console.error(`Die ${PROF.label} (${PROF.name}) läuft nicht.`); process.exit(2); }
   if (snapshot) {
     console.log(`## Sicherung „${SNAP}“ anlegen …`);
-    if (env.snapshots.some((s) => s.name === SNAP)) await job(vmctl.actions.deleteSnapshot({ name: SNAP }));
-    await job(vmctl.actions.snapshot({ name: SNAP, comment: "automatischer Test" }));
+    if (env.snapshots.some((s) => s.name === SNAP)) await job(vmctl.actions.deleteSnapshot({ vm: VMID, name: SNAP }));
+    await job(vmctl.actions.snapshot({ vm: VMID, name: SNAP, comment: "automatischer Test" }));
     await sleep(5000);
   }
   let failed = 0, total = 0;
   try {
-    const ip = (await vmctl.env()).vm.ip;
+    const ip = (await vmctl.env()).vms[PROF.id].vm.ip;
     await sh("rm -f /tmp/.rs_cwd", ip);
     for (const l of list) {
       console.log(`\n== ${l.id} · ${l.title}`);
+      if (l.prep) {
+        const p = await vmctl.execScript(l.prep, 600000, PROF.id);
+        console.log(`   ${p.ok ? "OK  " : "FAIL"} prep (Übung vorbereiten)`);
+        if (!p.ok) { failed++; console.log("        " + (p.stdout + p.stderr).trim().slice(-300)); continue; }
+      }
       for (const [i, s] of l.steps.entries()) {
         if (!s.cmd || !s.check || s.task) { console.log(`   –   ${i + 1}. ${s.title} (übersprungen)`); continue; }
         total++;
@@ -90,8 +101,8 @@ async function sh(cmd, ip) {
   } finally {
     if (snapshot) {
       console.log(`\n## VM auf „${SNAP}“ zurücksetzen …`);
-      await job(vmctl.actions.restore({ name: SNAP }));
-      await job(vmctl.actions.deleteSnapshot({ name: SNAP }));
+      await job(vmctl.actions.restore({ vm: VMID, name: SNAP }));
+      await job(vmctl.actions.deleteSnapshot({ vm: VMID, name: SNAP }));
     }
   }
   console.log(`\n${total - failed} von ${total} Schritten bestanden.`);

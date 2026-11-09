@@ -40,7 +40,8 @@ test("Lektionen", () => {
   uniq(LESSONS.map((l) => l.id), "Lektion");
   for (const l of LESSONS) {
     assert.ok(l.title && l.intro && Array.isArray(l.steps) && l.steps.length, `${l.id}: Titel, Intro oder Schritte fehlen`);
-    assert.ok(["browser", "ssh", "ps", "win"].includes(l.mode || "browser"), `${l.id}: unbekannter mode ${l.mode}`);
+    assert.ok(["browser", "ssh", "ps", "win", "sql"].includes(l.mode || "browser"), `${l.id}: unbekannter mode ${l.mode}`);
+    if (l.mode === "sql") assert.ok(W.SQL_DBS && W.SQL_DBS[l.db], `${l.id}: Datenbank ${l.db} fehlt in sql-cases.js`);
     assert.ok(GROUPS[l.group || l.mode || "browser"], `${l.id}: Gruppe ${l.group || l.mode} fehlt in GROUPS (app.js)`);
     l.steps.forEach((s, i) => {
       assert.ok(s.title, `${l.id} Schritt ${i + 1}: Titel fehlt`);
@@ -63,6 +64,37 @@ test("Lektionen: vorgeschlagene Befehle bestehen ihre eigene Prüfung (Befehlste
     if (!ok) bad.push(`${l.id} Schritt ${i + 1} „${s.title}“: ${s.check.cmd}`);
   });
   assert.deepStrictEqual(bad, [], "Diese Schritte lassen sich mit dem gezeigten Befehl nicht abschließen");
+});
+
+test("Lernpfad: Themen, Stufen und VMs", () => {
+  const topics = new Set((W.TOPICS || []).map((t) => t.id));
+  assert.ok(topics.size > 0, "topics.js definiert keine Themen");
+  uniq((W.TOPICS || []).map((t) => t.id), "Thema");
+  for (const l of LESSONS) {
+    if (l.vm !== undefined) {
+      assert.ok(["uebung", "server"].includes(l.vm), `${l.id}: vm muss "uebung" oder "server" sein`);
+      assert.ok(["ssh", "ps"].includes(l.mode), `${l.id}: vm gibt es nur bei mode ssh/ps`);
+    }
+    if (l.prep !== undefined) {
+      assert.strictEqual(l.vm, "uebung", `${l.id}: prep nur bei Übungen (vm: "uebung")`);
+      assert.strictEqual(typeof l.prep, "string", `${l.id}: prep muss ein Skript (Text) sein`);
+    }
+    if (l.topic !== undefined || l.stage !== undefined) {
+      assert.ok(topics.has(l.topic), `${l.id}: Thema ${l.topic} fehlt in topics.js`);
+      assert.ok([1, 2, 3].includes(l.stage), `${l.id}: stage muss 1–3 sein`);
+      if (l.stage === 1) assert.ok(["browser", "sql"].includes(l.mode || "browser"), `${l.id}: Stufe 1 (Lernen) läuft im Browser`);
+      if (l.stage === 2 && ["ssh", "ps"].includes(l.mode)) assert.strictEqual(l.vm, "uebung", `${l.id}: Stufe 2 (Üben) läuft in der Übungs-VM`);
+      if (l.stage === 3) assert.ok((l.vm || "server") === "server", `${l.id}: Stufe 3 (Anwenden) läuft auf der Server-VM`);
+    }
+  }
+  for (const m of MISSIONS) if (m.topic !== undefined) assert.ok(topics.has(m.topic), `${m.id}: Thema ${m.topic} fehlt in topics.js`);
+});
+
+test("Server findet prep-Skripte nur über die Lektions-ID", () => {
+  const server = read("server.js");
+  assert.ok(/body\.lesson/.test(server) && !/body\.(prep|script)/.test(server), "server.js darf kein Skript aus dem Browser annehmen");
+  const vmctl = read("vmctl.js");
+  assert.ok(/const PROFILES = \{/.test(vmctl) && /function profile\(vm\)/.test(vmctl), "vmctl.js: VM-Profile fehlen");
 });
 
 test("Trainingskarten", () => {
@@ -144,4 +176,36 @@ test("Subnetting-Aufgaben rechnen richtig", () => {
     const want = /Netzadresse/.test(t.q) ? net : /Broadcast/.test(t.q) ? net + size - 1 : /erste/.test(t.q) ? net + 1 : net + size - 2;
     assert.strictEqual(toInt(t.a), want, `${t.q} → ${t.a}`);
   }
+});
+
+/* SQL-Lektionen: jede Musterlösung läuft fehlerfrei gegen die Fall-Datenbank (sql.js wie im Browser)
+ * und besteht die eigene Schrittprüfung – mit derselben Fehlererkennung wie die App. */
+test("SQL-Krimi: Musterlösungen bestehen ihre Prüfung", async () => {
+  const initSqlJs = require("sql.js");
+  const SQL = await initSqlJs();
+  const [, reSrc, reFlags] = appJs.match(/const ERR_LINE_RE = \/(.*)\/(\w*);/);
+  const ERR = new RegExp(reSrc, reFlags);
+  const errorLines = (out) => out.split("\n").filter((l) => ERR.test(l)).join("\n");
+  const textOf = (res) => res.map((r) => [r.columns.join(" | "), ...r.values.map((v) => v.map((x) => (x === null ? "NULL" : String(x))).join(" | "))].join("\n")).join("\n\n");
+  const sqlLessons = LESSONS.filter((l) => l.mode === "sql");
+  assert.ok(sqlLessons.length >= 2, "zu wenige SQL-Lektionen");
+  const bad = [];
+  for (const l of sqlLessons) {
+    const db = new SQL.Database();
+    db.exec(W.SQL_DBS[l.db].sql);
+    l.steps.forEach((s, i) => {
+      const where = `${l.id} Schritt ${i + 1} „${s.title}“`;
+      if (!s.check) return;
+      if (!s.solution) { bad.push(`${where}: Musterlösung (solution) fehlt`); return; }
+      let out;
+      try { out = textOf(db.exec(s.solution)); } catch (e) { bad.push(`${where}: SQL-Fehler ${e.message}`); return; }
+      const c = s.check;
+      if (c.cmd && !c.cmd.test(s.solution)) bad.push(`${where}: Lösung passt nicht zu ${c.cmd}`);
+      if (errorLines(out)) bad.push(`${where}: Ausgabe sieht wie ein Fehler aus`);
+      if (c.out && !c.out.test(out)) bad.push(`${where}: Ausgabe passt nicht zu ${c.out}\n${out}`);
+      if (c.notOut && c.notOut.test(out)) bad.push(`${where}: Ausgabe enthält ${c.notOut}`);
+    });
+    db.close();
+  }
+  assert.deepStrictEqual(bad, []);
 });

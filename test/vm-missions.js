@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* Prüft Missionen gegen die echte Übungs-VM (fis-lab):
+/* Prüft Missionen gegen die echte Übungs-VM (rs-uebung; mit --vm server gegen fis-lab):
  *   Setup → Prüfung muss SCHEITERN → Musterlösung → Prüfung muss BESTEHEN.
  * Vorher wird ein Snapshot angelegt und danach zurückgespielt – deine VM ist hinterher genau wie vorher.
  *
@@ -16,7 +16,9 @@ const MISSIONS = require("../missions");
 
 const args = process.argv.slice(2);
 const snapshot = !args.includes("--no-snapshot");
-const ids = args.filter((a) => !a.startsWith("--"));
+const vi = args.indexOf("--vm");
+const VMID = vi >= 0 ? args[vi + 1] : "uebung";   // Missionen laufen in der App in der Übungs-VM
+const ids = args.filter((a, i) => !a.startsWith("--") && args[i - 1] !== "--vm");
 const SNAP = "vor-test";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const plain = (h) => h.replace(/<br\s*\/?>/g, "\n").replace(/<small>[\s\S]*?<\/small>/g, "").replace(/<[^>]+>/g, "")
@@ -29,15 +31,16 @@ async function job(j) {
 }
 
 (async () => {
-  const env = await vmctl.env();
-  if (!env.vm || env.vm.state !== "Running") { console.error("Die VM fis-lab läuft nicht – erst in rootshell starten."); process.exit(2); }
+  const prof = vmctl.profile(VMID);
+  const env = (await vmctl.env()).vms[prof.id];
+  if (!env.vm || env.vm.state !== "Running") { console.error(`Die ${prof.label} (${prof.name}) läuft nicht – erst in rootshell starten.`); process.exit(2); }
   const list = MISSIONS.filter((m) => m.target !== "sandbox" && (m.track || "linux") === "linux" && (!ids.length || ids.includes(m.id)));
   if (!list.length) { console.error("Keine passenden Missionen."); process.exit(2); }
 
   if (snapshot) {
     console.log(`## Sicherung „${SNAP}“ anlegen …`);
-    if (env.snapshots.some((s) => s.name === SNAP)) await job(vmctl.actions.deleteSnapshot({ name: SNAP }));
-    await job(vmctl.actions.snapshot({ name: SNAP, comment: "automatischer Test" }));
+    if (env.snapshots.some((s) => s.name === SNAP)) await job(vmctl.actions.deleteSnapshot({ vm: VMID, name: SNAP }));
+    await job(vmctl.actions.snapshot({ vm: VMID, name: SNAP, comment: "automatischer Test" }));
     await sleep(5000);
   }
 
@@ -45,13 +48,13 @@ async function job(j) {
   try {
     for (const m of list) {
       const t0 = Date.now();
-      const s = await vmctl.execScript(m.setup, 300000);
-      const v1 = await vmctl.execScript(m.verify, 60000);
+      const s = await vmctl.execScript(m.setup, 300000, VMID);
+      const v1 = await vmctl.execScript(m.verify, 60000, VMID);
       const fix = m.testFile
         ? `cat > ${m.testFile} << 'ROOTSHELL_EOF'\n${plain(m.solution)}\nROOTSHELL_EOF\nchmod 755 ${m.testFile}; chown ubuntu:ubuntu ${m.testFile}`
         : m.test || plain(m.solution);
-      const sol = await vmctl.execScript(fix, 300000);
-      const v2 = await vmctl.execScript(m.verify, 60000);
+      const sol = await vmctl.execScript(fix, 300000, VMID);
+      const v2 = await vmctl.execScript(m.verify, 60000, VMID);
       const ok = s.ok && !v1.ok && v2.ok;
       if (!ok) failed++;
       console.log(`${ok ? "PASS" : "FAIL"}  ${m.id.padEnd(16)} ${((Date.now() - t0) / 1000).toFixed(0).padStart(3)} s`);
@@ -65,8 +68,8 @@ async function job(j) {
   } finally {
     if (snapshot) {
       console.log(`## VM auf „${SNAP}“ zurücksetzen …`);
-      await job(vmctl.actions.restore({ name: SNAP }));
-      await job(vmctl.actions.deleteSnapshot({ name: SNAP }));
+      await job(vmctl.actions.restore({ vm: VMID, name: SNAP }));
+      await job(vmctl.actions.deleteSnapshot({ vm: VMID, name: SNAP }));
     }
   }
   console.log(`\n${list.length - failed} von ${list.length} Missionen bestanden.`);
