@@ -151,8 +151,10 @@ function makeRemote(modeName, shell) { return {
   mode: modeName, shell, ws: null, connected: false, connecting: false, scroll: "", target: "",
   send(s) { if (this.connected) this.ws.send(JSON.stringify({ type: "data", data: s })); },
   resize() { if (this.connected) this.ws.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows })); },
+  managedVm: null,   // "uebung" | "server", wenn mit einer App-VM verbunden; null = fremde Maschine
   connect(opts) {
     this.disconnect();
+    this.managedVm = null;
     if (STATIC) return;
     this.connecting = true; this.target = opts.target === "sandbox" ? "Windows-Sandbox" : `${opts.username}@${opts.host}`;
     updateStatus();
@@ -165,6 +167,7 @@ function makeRemote(modeName, shell) { return {
       if (m.type === "ready") {
         this.connected = true; this.connecting = false;
         updateStatus(); markEvent("ssh-connected");
+        if (settings.tab === "lessons" && this.mode !== "win") renderLesson();
         if (mode === this.mode) term.focus();
       } else if (m.type === "data") {
         this.scroll = (this.scroll + m.data).slice(-60000);
@@ -183,6 +186,7 @@ function makeRemote(modeName, shell) { return {
       this.connected = false; this.connecting = false; this.ws = null;
       if (mode === this.mode && was) term.writeln("\r\n\x1b[33mVerbindung getrennt.\x1b[0m");
       updateStatus();
+      if (was && settings.tab === "lessons" && this.mode !== "win") renderLesson();
     };
   },
   disconnect() { if (this.ws) { this.ws.close(); this.ws = null; } this.connected = false; this.connecting = false; if (typeof updateStatus === "function") updateStatus(); },
@@ -235,11 +239,15 @@ async function stopSandbox(ask = true) {
 $("#btn-sb-start").addEventListener("click", startSandbox);
 $("#btn-sb-stop").addEventListener("click", () => stopSandbox());
 
-async function connectManaged({ quiet } = {}) {
+/* Mit einer App-VM verbinden – standardmäßig mit der, die die aktuelle Lektion/Mission braucht */
+async function connectManaged({ quiet, vm: want } = {}) {
   const R = mode === "ps" ? ps : ssh;
+  const id = want || wantedVm();
   if (R.connecting) return false;   // läuft schon
+  if (R.connected && R.managedVm === id) return true;
+  if (activeVm !== id || (R.connected && R.managedVm !== id)) { disconnectAll(); activeVm = id; }
   R.connecting = true; updateStatus();
-  const r = await api("vm/prepare-ssh", {});
+  const r = await api("vm/prepare-ssh", { vm: id });
   R.connecting = false;
   if (r.error || !r.host) {
     updateStatus();
@@ -251,13 +259,14 @@ async function connectManaged({ quiet } = {}) {
     if (pwshInstalling) return false;
     pwshInstalling = true;
     if (mode === "ps") term.writeln("\x1b[36m⚡ PowerShell 7 wird in deiner VM installiert (einmalig, ca. 1 Minute) …\x1b[0m");
-    const ok = await startJob("vm/installPwsh");
+    const ok = await startJob("vm/installPwsh", { vm: id });
     pwshInstalling = false;
     if (!ok) { if (mode === "ps") term.writeln("\x1b[31mInstallation fehlgeschlagen – Details in der ⚙ VM-Zentrale.\x1b[0m"); return false; }
-    return connectManaged({ quiet });
+    return connectManaged({ quiet, vm: id });
   }
   if (mode === R.mode) { term.reset(); R.scroll = ""; }
   R.connect({ host: r.host, username: r.username, managed: true });
+  R.managedVm = id;
   return true;
 }
 
@@ -349,8 +358,24 @@ term.onResize(() => { clearTimeout(sizeTimer); sizeTimer = setTimeout(() => back
 let env = null;          // letzter Stand von /api/env
 let job = null;          // laufender VM-Job
 let lastAutoConnect = 0; // letzter automatischer Verbindungsversuch
-function vmState() { return env?.vm?.state || (env ? "none" : "unknown"); }
-function vmIP() { return env?.vm?.ip || null; }
+/* Zwei App-VMs: Übungs-VM (Wegwerf: Übungen, Missionen) und Server-VM (bleibt: dein Server) */
+let activeVm = "server";  // mit welcher VM das Terminal (ssh/ps) arbeitet
+let prepared = null;      // ID der Übung, die in dieser Sitzung in der Übungs-VM vorbereitet wurde
+let preparing = false;    // Vorbereitung läuft gerade
+const VM_IDS = ["uebung", "server"];
+const VM_LABEL = { uebung: "🧪 Übungs-VM", server: "🖥 Server-VM" };
+const VM_PLAIN = { uebung: "Übungs-VM", server: "Server-VM" };
+const vmEnv = (id = activeVm) => env?.vms?.[id] || null;
+function vmState(id = activeVm) { return vmEnv(id)?.vm?.state || (env ? "none" : "unknown"); }
+function vmIP(id = activeVm) { return vmEnv(id)?.vm?.ip || null; }
+const hasSnap = (id, name) => !!vmEnv(id)?.snapshots?.some((s) => s.name === name);
+const lessonVm = (l) => (l && (l.mode === "ssh" || l.mode === "ps") ? l.vm || "server" : null);
+/* Welche VM braucht die aktuelle Ansicht? */
+function wantedVm() {
+  if (settings.tab === "missions" && currentMission && currentMission.target !== "sandbox") return "uebung";
+  if (settings.tab === "lessons") return lessonVm(LESSONS[progress.lesson]) || activeVm;
+  return activeVm;
+}
 
 function updateStatus() {
   let cls = "", text = "";
@@ -366,11 +391,15 @@ function updateStatus() {
       cls = sb.state === "starting" || sb.state === "stopping" || win.connecting ? "booting" : sb.state === "ready" ? "warn" : "";
     }
   } else if (job && !job.done) { cls = "booting"; text = job.title + " …"; }
-  else if (remote().connected) { cls = "running"; text = `${mode === "ps" ? "PowerShell 7" : "Echte VM"} · ${remote().target}`; }
-  else if (remote().connecting) { cls = "booting"; text = `Verbinde mit ${remote().target} …`; }
+  else if (remote().connected) {
+    cls = "running";
+    const where = remote().managedVm ? VM_LABEL[remote().managedVm] : remote().target;
+    text = mode === "ps" ? `PowerShell 7 · ${where}` : remote().managedVm ? `${where} · ${remote().target}` : `Echte VM · ${where}`;
+  }
+  else if (remote().connecting) { cls = "booting"; text = `Verbinde mit ${VM_LABEL[activeVm]} …`; }
   else {
-    const s = vmState();
-    text = { Running: "VM läuft · nicht verbunden", Stopped: "VM ist aus", Suspended: "VM pausiert", Starting: "VM startet …", none: "Noch keine VM", unknown: "Echte VM" }[s] || `VM: ${s}`;
+    const s = vmState(), n = VM_LABEL[activeVm];
+    text = { Running: `${n} läuft · nicht verbunden`, Stopped: `${n} ist aus`, Suspended: `${n} pausiert`, Starting: `${n} startet …`, none: `Noch keine ${VM_PLAIN[activeVm]}`, unknown: "Echte VM" }[s] || `${n}: ${s}`;
     cls = s === "Running" ? "warn" : "";
   }
   $("#vm-dot").className = "dot " + cls;
@@ -378,7 +407,7 @@ function updateStatus() {
   const s = vmState();
   $("#btn-pause").hidden = s !== "Running";
   $("#btn-resume").hidden = !(s === "Suspended" || s === "Stopped");
-  $("#btn-endday").hidden = !(s === "Running" || s === "Suspended" || sb.running);
+  $("#btn-endday").hidden = !(VM_IDS.some((id) => ["Running", "Suspended"].includes(vmState(id))) || sb.running);
   $("#btn-sb-start").hidden = !(sb.state === "off" || sb.state === "unknown");
   $("#btn-sb-stop").hidden = !(sb.running || sb.state === "ready");
   $("#btn-ssh").textContent = remote().connected ? "🔌 Trennen" : "🔌 Verbinden";
@@ -388,16 +417,17 @@ async function refreshEnv() {
   if (STATIC) { env = null; updateStatus(); return null; }
   try { env = await api("env"); if (env.error) env = null; } catch { env = null; }
   if (env?.multipass?.installed && env?.hyperv?.running !== false) markEvent("env-ready");
-  if (env?.vm) markEvent("vm-created");
+  if (VM_IDS.some((id) => vmEnv(id)?.vm)) markEvent("vm-created");
   updateStatus();
   // VM läuft (z. B. außerhalb der App gestartet), aber keine Verbindung → selbst verbinden (höchstens alle 20 s)
-  if (isRemote() && env?.vm?.state === "Running" && env.vm.ip && !remote().connected && !remote().connecting && !pwshInstalling
+  if (isRemote() && vmState(wantedVm()) === "Running" && vmIP(wantedVm()) && !remote().connected && !remote().connecting && !pwshInstalling
       && !(job && !job.done) && Date.now() - lastAutoConnect > 20000) {
     lastAutoConnect = Date.now();
     connectManaged({ quiet: true });
   }
   if ($("#vm-dialog").open) renderVmCenter();
   if (settings.tab === "missions") renderMissions();
+  if (settings.tab === "lessons" && lessonVm(LESSONS[progress.lesson])) renderLesson();
   return env;
 }
 
@@ -433,7 +463,7 @@ function setMode(m) {
       m === "ps" ? psBanner() : sshBanner();
       refreshEnv().then((e) => {
         if (mode !== m || R.connected || R.connecting) return;
-        if (e?.vm?.state === "Running") connectManaged({ quiet: true });
+        if (vmState(wantedVm()) === "Running") connectManaged({ quiet: true });
         else openVmCenter();
       });
     }
@@ -507,6 +537,50 @@ $("#vm-close").addEventListener("click", () => $("#vm-dialog").close());
 
 function fmtGB(b) { return b ? (Number(b) / 1073741824).toFixed(1) + " GB" : "–"; }
 
+const VM_INFO = {
+  uebung: { size: "1 CPU-Kern, 1 GB RAM und 8 GB Platte", base: "basis",
+    role: "Wegwerf-Umgebung für Übungen und 🎯 Missionen. Vor jeder Übung springt sie auf „basis“ zurück – hier darf alles kaputtgehen." },
+  server: { size: "2 CPU-Kernen, 2 GB RAM und 15 GB Platte", base: "frisch",
+    role: "Dein Server: Hier installierst du echte Dienste Schritt für Schritt. Was du einrichtest, bleibt." },
+};
+/* Eine Karte der VM-Zentrale (Übungs-VM oder Server-VM) */
+function vmCard(id) {
+  const e = vmEnv(id), v = e?.vm, info = VM_INFO[id], t = `data-target="${id}"`;
+  let h = `<section class="vmcard${activeVm === id ? " active" : ""}"><h4>${VM_LABEL[id]} <code>${escapeHtml(e?.name || "")}</code></h4>
+    <p class="muted small">${info.role}</p>`;
+  if (!v) {
+    h += `<p>Noch nicht angelegt. Erstellt wird Ubuntu 24.04 LTS mit ${info.size} (wächst nur bei Bedarf).</p>
+      <button class="primary" data-vm="launch" ${t}>🚀 ${VM_PLAIN[id]} erstellen</button></section>`;
+    return h;
+  }
+  const stateTxt = { Running: "🟢 läuft", Stopped: "⚫ aus", Suspended: "⏸ pausiert", Starting: "🟡 startet", Restarting: "🟡 startet neu", Deleted: "🗑 gelöscht" }[v.state] || v.state;
+  h += `<table class="vminfo"><tr><td>Zustand</td><td><b>${stateTxt}</b></td></tr>
+    <tr><td>IP-Adresse</td><td>${v.ip ? `<code>${v.ip}</code>` : "–"}</td></tr>
+    <tr><td>System</td><td>${escapeHtml(v.release || "")}</td></tr>
+    ${v.mem ? `<tr><td>RAM</td><td>${fmtGB(v.mem.used)} von ${fmtGB(v.mem.total)}</td></tr>` : ""}
+    ${v.disk ? `<tr><td>Platte</td><td>${fmtGB(v.disk.used)} von ${fmtGB(v.disk.total)}</td></tr>` : ""}</table>
+    <div class="btnrow">
+      ${v.state === "Running" ? `<button data-vm="connect" class="primary" ${t}>🔌 Verbinden</button><button data-vm="suspend" ${t}>☕ Pause</button><button data-vm="stop" ${t}>🌙 Herunterfahren</button>`
+        : `<button data-vm="start" class="primary" ${t}>▶ ${v.state === "Suspended" ? "Fortsetzen" : "Starten"}</button>`}
+    </div>`;
+  h += hasSnap(id, info.base)
+    ? `<div class="reset-row"><div><b>${id === "uebung" ? "Neu anfangen?" : "VM verbastelt?"}</b><br><span class="muted small">Zurück auf den Snapshot „${info.base}“. Dein Lernfortschritt in der App bleibt.</span></div>
+       <button data-vm="reset-fresh" class="danger" ${t}>⟲ Auf ${id === "uebung" ? "Basis" : "Werkszustand"}</button></div>`
+    : `<div class="reset-row"><div><b>Ausgangszustand sichern</b><br><span class="muted small">Es gibt noch keinen Snapshot „${info.base}“. Lege ihn jetzt an, dann kannst du die VM später mit einem Klick zurücksetzen.</span></div>
+       <button data-vm="save-fresh" ${t}>📸 Als „${info.base}“ sichern</button></div>`;
+  h += `<details class="snapbox"><summary>Snapshots (${e.snapshots.length})</summary><ul class="snaps">`;
+  for (const s of e.snapshots) {
+    h += `<li><code>${escapeHtml(s.name)}</code> <small>${escapeHtml(s.comment)}</small>
+      <button data-vm="restore" data-name="${escapeHtml(s.name)}" ${t}>↺ zurückspielen</button>
+      <button data-vm="delsnap" data-name="${escapeHtml(s.name)}" class="ghost" ${t}>🗑</button></li>`;
+  }
+  if (!e.snapshots.length) h += `<li class="muted">Noch keine Snapshots.</li>`;
+  h += `</ul><div class="btnrow"><input class="snap-name" ${t} placeholder="z. B. vor-lemp" maxlength="30"><button data-vm="snapshot" ${t}>📸 Snapshot anlegen</button></div>
+    <p class="muted small">Die VM wird dafür kurz angehalten und danach wieder gestartet.</p>
+    <p class="muted small">Brauchst du sie nicht mehr? Gestoppt braucht sie keinen RAM. <button data-vm="delete" class="danger small" ${t}>🗑 ${VM_PLAIN[id]} löschen</button></p></details></section>`;
+  return h;
+}
+
 function renderVmCenter() {
   const box = $("#vm-body");
   if (!env) { box.innerHTML = `<p class="muted">Prüfe deinen PC …</p>`; return; }
@@ -519,55 +593,18 @@ function renderVmCenter() {
     h += `<li>${ok(hv.running)} Hyper-V ${hv.running ? "aktiv" : hv.enabled ? "installiert, aber nicht aktiv – Windows neu starten" : "nicht aktiviert"}
       ${!hv.enabled && hv.supported ? `<button data-vm="hyperv">Hyper-V aktivieren</button>` : ""}
       ${!hv.running && hv.firmware === false && !hv.enabled ? `<small>Falls das nicht klappt: Virtualisierung (Intel VT-x / AMD-V / SVM) im BIOS/UEFI einschalten.</small>` : ""}</li>`;
-    h += `<li>${ok(env.ramGB >= 8)} Arbeitsspeicher: ${env.ramGB || "?"} GB <small>(die VM nutzt 2 GB)</small></li>`;
+    h += `<li>${ok(env.ramGB >= 8)} Arbeitsspeicher: ${env.ramGB || "?"} GB <small>(Server-VM 2 GB, Übungs-VM 1 GB – nie beide gleichzeitig)</small></li>`;
   }
   h += `<li>${ok(mp.installed)} Multipass ${mp.installed ? escapeHtml(mp.version || "") : "nicht installiert"}
     ${!mp.installed ? (env.winget ? `<button data-vm="install">Multipass installieren</button>` : `<small>Download: multipass.run</small>`) : ""}</li></ul></section>`;
 
-  const ready = mp.installed;
-  const v = env.vm;
-  h += `<section><h4>2 · Deine Übungs-VM <code>${escapeHtml(env.vmName)}</code></h4>`;
-  if (!ready) h += `<p class="muted">Erst die Voraussetzungen erfüllen.</p>`;
-  else if (!v) {
-    h += `<p>Noch keine VM vorhanden. Erstellt wird Ubuntu 24.04 LTS mit 2 CPU-Kernen, 2 GB RAM und 15 GB Platte (wächst nur bei Bedarf).</p>
-      <button class="primary" data-vm="launch">🚀 VM erstellen</button>`;
-  } else {
-    const stateTxt = { Running: "🟢 läuft", Stopped: "⚫ aus", Suspended: "⏸ pausiert", Starting: "🟡 startet", Restarting: "🟡 startet neu", Deleted: "🗑 gelöscht" }[v.state] || v.state;
-    h += `<table class="vminfo"><tr><td>Zustand</td><td><b>${stateTxt}</b></td></tr>
-      <tr><td>IP-Adresse</td><td>${v.ip ? `<code>${v.ip}</code>` : "–"}</td></tr>
-      <tr><td>System</td><td>${escapeHtml(v.release || "")}</td></tr>
-      ${v.mem ? `<tr><td>RAM</td><td>${fmtGB(v.mem.used)} von ${fmtGB(v.mem.total)}</td></tr>` : ""}
-      ${v.disk ? `<tr><td>Platte</td><td>${fmtGB(v.disk.used)} von ${fmtGB(v.disk.total)}</td></tr>` : ""}</table>
-      <div class="btnrow">
-        ${v.state === "Running" ? `<button data-vm="connect" class="primary">🔌 Verbinden</button><button data-vm="suspend">☕ Pause</button><button data-vm="stop">🌙 Herunterfahren</button>`
-          : `<button data-vm="start" class="primary">▶ ${v.state === "Suspended" ? "Fortsetzen" : "Starten"}</button>`}
-      </div>`;
-    h += env.snapshots.some((s) => s.name === "frisch")
-      ? `<div class="reset-row"><div><b>VM verbastelt?</b><br><span class="muted small">Setzt die VM auf den Zustand direkt nach der Erstellung zurück (Snapshot „frisch“). Dein Lernfortschritt in der App bleibt.</span></div>
-         <button data-vm="reset-fresh" class="danger">⟲ Auf Werkszustand</button></div>`
-      : `<div class="reset-row"><div><b>Werkszustand sichern</b><br><span class="muted small">Es gibt noch keinen Snapshot „frisch“. Lege ihn jetzt an, dann kannst du die VM später mit einem Klick zurücksetzen.</span></div>
-         <button data-vm="save-fresh">📸 Als „frisch“ sichern</button></div>`;
-  }
-  h += `</section>`;
+  h += `<p class="muted small">Es läuft immer nur eine VM – startest du die andere, wird die laufende pausiert.</p>
+    <div class="vmcards">${mp.installed ? VM_IDS.map(vmCard).join("") : `<p class="muted">Erst die Voraussetzungen erfüllen.</p>`}</div>`;
 
-  if (v) {
-    h += `<section><h4>3 · Snapshots (Sicherungspunkte)</h4><ul class="snaps">`;
-    for (const s of env.snapshots) {
-      h += `<li><code>${escapeHtml(s.name)}</code> <small>${escapeHtml(s.comment)}</small>
-        <button data-vm="restore" data-name="${escapeHtml(s.name)}">↺ zurückspielen</button>
-        <button data-vm="delsnap" data-name="${escapeHtml(s.name)}" class="ghost">🗑</button></li>`;
-    }
-    if (!env.snapshots.length) h += `<li class="muted">Noch keine Snapshots.</li>`;
-    h += `</ul><div class="btnrow"><input id="snap-name" placeholder="z. B. vor-lemp" maxlength="30"><button data-vm="snapshot">📸 Snapshot anlegen</button></div>
-      <p class="muted small">Die VM wird dafür kurz angehalten und danach wieder gestartet.</p></section>`;
-  }
-
-  h += `<section><h4>4 · Ressourcen schonen</h4>
+  h += `<section><h4>Ressourcen schonen</h4>
     <label class="inline">Automatisch pausieren nach <select id="idle-min">
       ${[0, 15, 30, 60, 120].map((n) => `<option value="${n}" ${settings.idleMin === n ? "selected" : ""}>${n ? n + " Minuten" : "nie"}</option>`).join("")}
-    </select> ohne Eingabe</label>
-    ${v ? `<p class="muted small">Fertig mit dem Kurs? Du kannst die VM behalten (gestoppt braucht sie keinen RAM) oder komplett löschen.</p>
-    <button data-vm="delete" class="danger">🗑 VM löschen</button>` : ""}</section>`;
+    </select> ohne Eingabe</label></section>`;
 
   h += `<section><h4>Andere Maschine (Proxmox, Server, …)</h4>
     <button data-vm="manual">Per IP + Passwort verbinden …</button></section>
@@ -580,6 +617,9 @@ $("#vm-body").addEventListener("click", async (e) => {
   const b = e.target.closest("[data-vm]");
   if (!b) return;
   const a = b.dataset.vm;
+  const id = VM_IDS.includes(b.dataset.target) ? b.dataset.target : activeVm;
+  const base = VM_INFO[id].base;
+  const reconnect = (ok) => ok && isRemote() && activeVm === id && connectManaged({ quiet: true, vm: id });
   if (a === "install") {
     if (!confirm("Multipass (von Canonical) jetzt über winget installieren?\nWindows fragt evtl. nach Administratorrechten.")) return;
     startJob("install/multipass");
@@ -587,34 +627,39 @@ $("#vm-body").addEventListener("click", async (e) => {
     if (!confirm("Hyper-V aktivieren?\n\nWindows fragt nach Administratorrechten. Danach ist ein NEUSTART nötig.")) return;
     startJob("install/hyperv");
   } else if (a === "launch") {
-    startJob("vm/launch", {}, { after: async (ok) => { if (ok) { markEvent("vm-created"); setMode(vmMode()); await connectManaged(); } } });
+    if (activeVm !== id) disconnectAll();
+    activeVm = id;
+    startJob("vm/launch", { vm: id }, { after: async (ok) => { if (ok) { markEvent("vm-created"); setMode(vmMode()); await connectManaged({ vm: id }); } } });
   } else if (a === "start") {
-    startJob("vm/start", {}, { after: async (ok) => { if (ok) { $("#vm-dialog").close(); setMode(vmMode()); await connectManaged(); } } });
+    if (activeVm !== id) disconnectAll();
+    activeVm = id;
+    startJob("vm/start", { vm: id }, { after: async (ok) => { if (ok) { $("#vm-dialog").close(); setMode(vmMode()); await connectManaged({ vm: id }); } } });
   } else if (a === "connect") {
-    $("#vm-dialog").close(); setMode(vmMode()); connectManaged();
-  } else if (a === "suspend") { doPause(); }
-  else if (a === "stop") { disconnectAll(); startJob("vm/stop"); }
+    $("#vm-dialog").close(); setMode(vmMode()); connectManaged({ vm: id });
+  } else if (a === "suspend") { doPause(false, id); }
+  else if (a === "stop") { if (activeVm === id) disconnectAll(); startJob("vm/stop", { vm: id }); }
   else if (a === "snapshot") {
-    const name = ($("#snap-name").value || "").trim() || "punkt-" + new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
-    disconnectAll();
-    startJob("vm/snapshot", { name, comment: new Date().toLocaleString("de-DE") }, { after: (ok) => ok && isRemote() && connectManaged({ quiet: true }) });
+    const input = b.parentElement.querySelector(".snap-name");
+    const name = (input?.value || "").trim() || "punkt-" + new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
+    if (activeVm === id) disconnectAll();
+    startJob("vm/snapshot", { vm: id, name, comment: new Date().toLocaleString("de-DE") }, { after: reconnect });
   } else if (a === "restore") {
-    if (!confirm(`VM auf „${b.dataset.name}“ zurücksetzen?\nAlles, was du seitdem geändert hast, ist danach weg.`)) return;
-    disconnectAll();
-    startJob("vm/restore", { name: b.dataset.name }, { after: (ok) => ok && isRemote() && connectManaged({ quiet: true }) });
+    if (!confirm(`${VM_PLAIN[id]} auf „${b.dataset.name}“ zurücksetzen?\nAlles, was du seitdem geändert hast, ist danach weg.`)) return;
+    if (activeVm === id) disconnectAll();
+    startJob("vm/restore", { vm: id, name: b.dataset.name }, { after: reconnect });
   } else if (a === "reset-fresh") {
-    resetVmFresh();
+    resetVmFresh(id);
   } else if (a === "save-fresh") {
-    disconnectAll();
-    startJob("vm/snapshot", { name: "frisch", comment: "Werkszustand (" + new Date().toLocaleDateString("de-DE") + ")" }, { after: (ok) => ok && isRemote() && connectManaged({ quiet: true }) });
+    if (activeVm === id) disconnectAll();
+    startJob("vm/snapshot", { vm: id, name: base, comment: "Ausgangszustand (" + new Date().toLocaleDateString("de-DE") + ")" }, { after: reconnect });
   } else if (a === "delsnap") {
     if (!confirm(`Snapshot „${b.dataset.name}“ löschen?`)) return;
-    startJob("vm/deleteSnapshot", { name: b.dataset.name });
+    startJob("vm/deleteSnapshot", { vm: id, name: b.dataset.name });
   } else if (a === "delete") {
-    if (!confirm("Die VM fis-lab wirklich LÖSCHEN?\nAlle Dateien, Dienste und Snapshots darin sind danach weg. (Du kannst jederzeit eine neue erstellen.)")) return;
+    if (!confirm(`Die ${VM_PLAIN[id]} (${vmEnv(id)?.name}) wirklich LÖSCHEN?\nAlle Dateien, Dienste und Snapshots darin sind danach weg. (Du kannst jederzeit eine neue erstellen.)`)) return;
     if (prompt('Zur Sicherheit bitte "löschen" eintippen:') !== "löschen") return;
-    disconnectAll();
-    startJob("vm/delete");
+    if (activeVm === id) disconnectAll();
+    startJob("vm/delete", { vm: id });
   } else if (a === "manual") {
     $("#vm-dialog").close(); openSshDialog();
   } else if (a === "check") {
@@ -622,31 +667,37 @@ $("#vm-body").addEventListener("click", async (e) => {
   }
 });
 
-/* Ein-Klick-Reset: VM auf den Snapshot „frisch“ zurücksetzen */
-async function resetVmFresh() {
-  if (!env?.snapshots?.some((s) => s.name === "frisch")) { toast("Es gibt keinen Snapshot „frisch“ – lege ihn in der VM-Zentrale an."); openVmCenter(); return; }
-  if (!confirm("VM auf den Werkszustand („frisch“) zurücksetzen?\n\nAlles, was du in der VM installiert, angelegt oder geändert hast, ist danach weg. Dein Lernfortschritt in rootshell bleibt erhalten.")) return;
-  disconnectAll();
+/* Ein-Klick-Reset: Übungs-VM auf „basis“, Server-VM auf „frisch“ */
+async function resetVmFresh(id = activeVm) {
+  const base = VM_INFO[id].base;
+  if (id === "server" && !hasSnap(id, base)) { toast("Es gibt keinen Snapshot „frisch“ – lege ihn in der VM-Zentrale an."); openVmCenter(); return; }
+  if (!vmEnv(id)?.vm) { toast(`Die ${VM_PLAIN[id]} gibt es noch nicht.`); openVmCenter(); return; }
+  if (!confirm(`${VM_PLAIN[id]} auf „${base}“ zurücksetzen?\n\nAlles, was du darin installiert, angelegt oder geändert hast, ist danach weg. Dein Lernfortschritt in rootshell bleibt erhalten.`)) return;
+  if (activeVm === id) disconnectAll();
   if (!$("#vm-dialog").open) openVmCenter();
-  const ok = await startJob("vm/restore", { name: "frisch" }, { after: (ok) => ok && isRemote() && connectManaged({ quiet: true }) });
+  const after = (ok) => ok && isRemote() && activeVm === id && connectManaged({ quiet: true, vm: id });
+  // Übungs-VM: resetBase legt „basis“ an, falls er fehlt
+  const ok = await startJob(id === "uebung" ? "vm/resetBase" : "vm/restore", { vm: id, name: base }, { after });
   if (ok) {
-    // gestartete Missionen gelten nach dem Reset als nicht mehr vorbereitet
-    Object.values(missionState.m).forEach((s) => { s.started = false; });
-    saveMissions(); missionMsg = null;
-    toast("⟲ VM ist wieder im Werkszustand.");
-    if (settings.tab === "missions") renderMissions();
+    if (id === "uebung") {
+      // gestartete Missionen und Übungen gelten nach dem Reset als nicht mehr vorbereitet
+      Object.values(missionState.m).forEach((s) => { s.started = false; });
+      saveMissions(); missionMsg = null; prepared = null;
+    }
+    toast(`⟲ ${VM_PLAIN[id]} ist wieder im Zustand „${base}“.`);
+    renderTutor();
   }
 }
 
 /* ---------- Pause / Fortsetzen / Feierabend ---------- */
-async function doPause(auto) {
-  disconnectAll();
-  if (isRemote()) { term.writeln(`\r\n\x1b[33m☕ VM wird pausiert${auto ? " (keine Eingabe seit " + settings.idleMin + " Minuten)" : ""} …\x1b[0m`); }
-  const ok = await startJob("vm/suspend");
+async function doPause(auto, id = activeVm) {
+  if (id === activeVm) disconnectAll();
+  if (isRemote() && id === activeVm) { term.writeln(`\r\n\x1b[33m☕ ${VM_PLAIN[id]} wird pausiert${auto ? " (keine Eingabe seit " + settings.idleMin + " Minuten)" : ""} …\x1b[0m`); }
+  const ok = await startJob("vm/suspend", { vm: id });
   if (ok && isRemote()) term.writeln("\x1b[33m⏸ Pausiert. Weiter mit „▶ Fortsetzen“ oben.\x1b[0m");
 }
 $("#btn-pause").addEventListener("click", () => doPause());
-$("#btn-resume").addEventListener("click", () => startJob("vm/start", {}, { after: (ok) => ok && connectManaged() }));
+$("#btn-resume").addEventListener("click", () => startJob("vm/start", { vm: activeVm }, { after: (ok) => ok && connectManaged({ vm: activeVm }) }));
 $("#btn-endday").addEventListener("click", () => $("#endday-dialog").showModal());
 $("#endday-form").addEventListener("submit", async (e) => {
   if (e.submitter?.value !== "ok") return;
@@ -655,9 +706,12 @@ $("#endday-form").addEventListener("submit", async (e) => {
     try { await idbPut("snapshot", await vm.emulator.save_state()); } catch {}
   }
   if (sb.running) await stopSandbox(false);
-  if (stopVm && (vmState() === "Running" || vmState() === "Suspended")) {
-    disconnectAll();
-    await startJob("vm/stop");
+  if (stopVm) {
+    for (const id of VM_IDS) {
+      if (vmState(id) !== "Running" && vmState(id) !== "Suspended") continue;
+      disconnectAll();
+      await startJob("vm/stop", { vm: id });
+    }
   }
   const st = load(KEYS.drills, { cards: {} });
   const due = Object.values(st.cards).filter((c) => c.due <= Date.now() + 86400000).length;
@@ -705,7 +759,7 @@ $("#ssh-form").addEventListener("submit", (e) => {
 });
 $("#btn-ssh").addEventListener("click", () => {
   if (remote().connected) return remote().disconnect();
-  if (vmState() === "Running") return connectManaged();
+  if (vmState(wantedVm()) === "Running") return connectManaged();
   openVmCenter();
 });
 
@@ -748,7 +802,7 @@ const subIP = (html) => html.replace(/\{\{IP\}\}/g, vmIP() || "IP-DEINER-VM");
 const GROUPS = { browser: "Teil 1 · Grundlagen im Mini-Linux", ssh: "Teil 2 · Echte VM – Installationen & Dienste (FISI)", self: "Teil 3 · Selbst hosten",
   ps: "Teil 1 · PowerShell-Grundlagen", "ps-admin": "Teil 2 · Windows-Verwaltung", win: "Teil 3 · Echtes Windows (Sandbox)",
   script: "Teil 4 · Skripte schreiben (Bash)", "ps-script": "Teil 4 · Skripte schreiben (PowerShell)",
-  sec: "Teil 5 · IT-Security (Blue Team)", net: "Teil 6 · Netzwerk für FISI", devops: "Teil 7 · Git & Docker" };
+  sec: "Teil 5 · IT-Security (Blue Team)", net: "Teil 6 · Netzwerk für FISI", devops: "Teil 7 · Git & Docker", db: "Teil 8 · Datenbanken" };
 const trackOf = (l) => (l.mode === "ps" || l.mode === "win" ? "windows" : "linux");
 const trackIdx = () => LESSONS.map((l, i) => i).filter((i) => trackOf(LESSONS[i]) === (settings.track || "linux"));
 function renderNav() {
@@ -772,11 +826,86 @@ function renderNav() {
   $("#btn-next").disabled = progress.lesson === idx[idx.length - 1];
 }
 
+/* ---------- Lernpfad: ① Lernen → ② Üben → ③ Anwenden → ④ Störfall ---------- */
+const STAGES = {
+  1: { icon: "①", name: "Lernen", where: "im Browser" },
+  2: { icon: "②", name: "Üben", where: "in der 🧪 Übungs-VM" },
+  3: { icon: "③", name: "Anwenden", where: "auf deiner 🖥 Server-VM" },
+  4: { icon: "④", name: "Störfall", where: "Mission in der 🧪 Übungs-VM" },
+};
+const lessonDone = (l) => doneSet(l.id).size >= l.steps.length;
+/* Stationen eines Themas: Lektionen je Stufe (aktueller Kurs) und Missionen als Stufe 4 */
+function stations(topic) {
+  const t = settings.track || "linux";
+  return [1, 2, 3, 4].map((stage) => {
+    const items = stage === 4
+      ? MISSIONS.filter((m) => m.topic === topic && (m.track || "linux") === t).map((m) => ({ kind: "mission", ref: m, done: mState(m.id).solved }))
+      : LESSONS.map((l, i) => ({ l, i })).filter(({ l }) => l.topic === topic && l.stage === stage && trackOf(l) === t)
+        .map(({ l, i }) => ({ kind: "lesson", ref: l, idx: i, done: lessonDone(l) }));
+    return { stage, items, done: items.length > 0 && items.every((x) => x.done) };
+  });
+}
+function pathBar(topic, current) {
+  const tp = (window.TOPICS || []).find((x) => x.id === topic);
+  const st = stations(topic).filter((s) => s.items.length);
+  return `<nav class="pathbar" aria-label="Lernpfad">${tp ? `<span class="pathtopic">${escapeHtml(tp.title)}</span>` : ""}${st.map((s, n) =>
+    `${n ? `<span class="patharrow">→</span>` : ""}<button data-goto="${topic}:${s.stage}" class="station${s.stage === current ? " on" : ""}${s.done ? " done" : ""}"
+      title="${STAGES[s.stage].name} ${STAGES[s.stage].where}">${STAGES[s.stage].icon} ${STAGES[s.stage].name}${s.done ? " ✓" : ""}</button>`).join("")}</nav>`;
+}
+/* Zur Station springen: erste unerledigte Lektion bzw. Mission der Stufe */
+function gotoStation(key) {
+  const [topic, stage] = [key.split(":")[0], +key.split(":")[1]];
+  const s = stations(topic).find((x) => x.stage === stage);
+  if (!s || !s.items.length) return;
+  const it = s.items.find((x) => !x.done) || s.items[0];
+  if (it.kind === "mission") {
+    currentMission = it.ref; missionMsg = null; settings.tab = "missions"; saveSettings(); renderTutor(); return;
+  }
+  if (settings.tab !== "lessons") { settings.tab = "lessons"; saveSettings(); }
+  gotoLesson(it.idx);
+  renderTutor();
+  const want = it.ref.mode || "browser";
+  if (want !== mode && !(want === "win" && STATIC)) setMode(want);
+}
+/* Kasten oben in VM-Lektionen: richtige VM vorhanden, vorbereitet, verbunden? */
+function vmBox(lesson) {
+  const id = lessonVm(lesson), st = vmState(id), R = remote();
+  const busyNow = preparing || (job && !job.done);
+  if (!vmEnv(id)?.vm) {
+    return `<div class="box warn">Diese Lektion läuft in der <b>${VM_LABEL[id]}</b> – die gibt es noch nicht.
+      <button class="primary" data-action="vm-launch" data-target="${id}" ${busyNow ? "disabled" : ""}>🚀 ${VM_PLAIN[id]} erstellen</button>
+      <br><small class="muted">Einmalig, dauert ein paar Minuten. ${VM_INFO[id].role}</small></div>`;
+  }
+  if (id === "uebung" && prepared !== lesson.id) {
+    return `<div class="box tip">🧪 <b>Übung in der Wegwerf-VM.</b> „Vorbereiten“ setzt die Übungs-VM auf „basis“ zurück${lesson.prep ? " und richtet alles ein, was du für diese Übung brauchst" : ""} (ca. 1 Minute). Danach darfst du hier alles ausprobieren.
+      <div class="btnrow"><button class="primary" data-action="prep" ${busyNow ? "disabled" : ""}>${busyNow ? "⏳ Läuft …" : "▶ Übung vorbereiten"}</button></div></div>`;
+  }
+  if (R.connected && R.managedVm === id) return "";
+  if (st === "Running") return `<div class="box warn">Das Terminal ist nicht mit der <b>${VM_LABEL[id]}</b> verbunden. <button class="primary" data-action="vm-connect" data-target="${id}">🔌 Verbinden</button></div>`;
+  return `<div class="box warn">Die <b>${VM_LABEL[id]}</b> ist ${st === "Suspended" ? "pausiert" : "aus"}. <button class="primary" data-action="vm-start" data-target="${id}" ${busyNow ? "disabled" : ""}>▶ ${st === "Suspended" ? "Fortsetzen" : "Starten"}</button></div>`;
+}
+async function prepareExercise() {
+  const l = LESSONS[progress.lesson];
+  disconnectAll(); activeVm = "uebung";
+  preparing = true; renderLesson();
+  const ok = await startJob("vm/prepare", { lesson: l.id });
+  preparing = false;
+  if (ok) {
+    prepared = l.id;
+    if (mode !== (l.mode || "ssh")) setMode(l.mode || "ssh");
+    await connectManaged({ vm: "uebung" });
+    toast("🧪 Übung ist vorbereitet – leg los!");
+  } else toast("Vorbereitung fehlgeschlagen – Details in der ⚙ VM-Zentrale.");
+  renderLesson();
+}
+
 function renderLesson(scrollToActive = false) {
   const lesson = LESSONS[progress.lesson];
   const done = doneSet(lesson.id);
   const active = lesson.steps.findIndex((_, i) => !done.has(i));
   const lmode = lesson.mode || "browser";
+  // Solange das Terminal nirgends verbunden ist, folgt die aktive VM der Lektion
+  if (lessonVm(lesson) && ![ssh, ps].some((R) => R.connected || R.connecting) && !(job && !job.done)) activeVm = lessonVm(lesson);
   let html = `<h2>${lesson.title}</h2>`;
   if (STATIC && lmode !== "browser") {
     html += `<div class="box warn">📖 Diese Lektion kannst du hier lesen. Zum Mitmachen brauchst du ${lmode === "win" ? "die Windows-Sandbox" : "die Übungs-VM"}. ${DEMO_MSG}</div>`;
@@ -786,7 +915,7 @@ function renderLesson(scrollToActive = false) {
       : lmode === "ps"
       ? `<div class="box warn">Diese Lektion läuft in <b>PowerShell</b>. <button data-mode="ps">⚡ Zu PowerShell wechseln</button></div>`
       : lmode === "ssh"
-      ? `<div class="box warn">Diese Lektion läuft auf der <b>echten VM</b> (Ubuntu), weil hier Software installiert wird. <button data-mode="ssh">🔌 Zur echten VM wechseln</button></div>`
+      ? `<div class="box warn">Diese Lektion läuft in deiner <b>${VM_LABEL[lessonVm(lesson)]}</b> (Ubuntu). <button data-mode="ssh">🔌 Zur echten VM wechseln</button></div>`
       : `<div class="box warn">Diese Lektion ist fürs <b>Mini-Linux</b> gedacht (geht aber meist auch auf der VM). <button data-mode="browser">🖥 Zum Mini-Linux wechseln</button></div>`;
   }
   if (lmode === "win" && mode === "win" && !win.connected) {
@@ -795,6 +924,8 @@ function renderLesson(scrollToActive = false) {
       : sb.state === "starting" ? `<div class="box tip">⏳ Die Sandbox startet gerade …</div>`
       : `<div class="box warn">Die Sandbox läuft noch nicht. <button data-action="sb-start" class="primary">▶ Sandbox starten</button></div>`;
   }
+  if (!STATIC && lmode === mode && (lmode === "ssh" || lmode === "ps")) html += vmBox(lesson);
+  if (lesson.topic) html = pathBar(lesson.topic, lesson.stage) + html;
   html += `<p class="intro">${lesson.intro}</p>`;
   lesson.steps.forEach((s, i) => {
     const cls = done.has(i) ? "done" : i === active ? "active" : i > active && active !== -1 ? "locked" : "";
@@ -819,7 +950,9 @@ function renderLesson(scrollToActive = false) {
   });
   if (lesson.outro) html += `<div class="box tip">${lesson.outro}</div>`;
   if (active === -1) {
-    html += `<div class="lesson-done">🎉 Lektion abgeschlossen!${progress.lesson < trackIdx().slice(-1)[0] ? " Weiter geht's mit der nächsten." : ""}<br><small>Neue Trainingskarten sind jetzt im Tab 🔁 Training freigeschaltet.</small></div>`;
+    const next = lesson.topic ? stations(lesson.topic).find((s) => s.stage > lesson.stage && s.items.length) : null;
+    html += `<div class="lesson-done">🎉 Lektion abgeschlossen!${next ? "" : progress.lesson < trackIdx().slice(-1)[0] ? " Weiter geht's mit der nächsten." : ""}<br><small>Neue Trainingskarten sind jetzt im Tab 🔁 Training freigeschaltet.</small>
+      ${next ? `<div class="btnrow center"><button class="primary" data-goto="${lesson.topic}:${next.stage}">Weiter: ${STAGES[next.stage].icon} ${STAGES[next.stage].name} →</button></div>` : ""}</div>`;
   }
   $("#lesson").innerHTML = subIP(html);
   renderNav();
@@ -889,11 +1022,24 @@ $(".tutor").addEventListener("click", async (e) => {
     catch { toast("Kopieren nicht möglich – bitte markieren und Strg+C"); }
     return;
   }
-  const md = e.target.closest("[data-mode]");
+  // nur Knöpfe – <body> trägt selbst data-mode und würde sonst jeden Klick abfangen
+  const md = e.target.closest("button[data-mode]");
   if (md && !md.closest(".mode-switch")) { setMode(md.dataset.mode); return; }
   const act = e.target.closest("[data-action]");
   if (act?.dataset.action === "vm-center") { openVmCenter(); return; }
-  if (act?.dataset.action === "vm-reset") { resetVmFresh(); return; }
+  if (act?.dataset.action === "vm-reset") { resetVmFresh(act.dataset.target || activeVm); return; }
+  if (act?.dataset.action === "vm-launch" || act?.dataset.action === "vm-start") {
+    const id = VM_IDS.includes(act.dataset.target) ? act.dataset.target : activeVm;
+    if (activeVm !== id) disconnectAll();
+    activeVm = id;
+    if (!$("#vm-dialog").open) openVmCenter();
+    startJob(act.dataset.action === "vm-launch" ? "vm/launch" : "vm/start", { vm: id }, { after: async (ok) => { if (ok) { markEvent("vm-created"); if (!isRemote()) setMode(vmMode()); await connectManaged({ vm: id }); renderTutor(); } } });
+    return;
+  }
+  if (act?.dataset.action === "vm-connect") { const id = act.dataset.target || wantedVm(); if (!isRemote()) setMode(vmMode()); connectManaged({ vm: id }); return; }
+  if (act?.dataset.action === "prep") { prepareExercise(); return; }
+  const go = e.target.closest("[data-goto]");
+  if (go) { gotoStation(go.dataset.goto); return; }
   if (act?.dataset.action === "sb-start") { if (mode !== "win") setMode("win"); startSandbox(); return; }
   const sk = e.target.closest("[data-skip]");
   if (sk) markDone(progress.lesson, +sk.dataset.skip, false);
@@ -1038,19 +1184,19 @@ function renderMissions() {
   const el = $("#missions");
   const onSb = currentMission?.target === "sandbox";
   const want = onSb ? "win" : vmMode();
-  const managed = onSb ? sb.state === "ready" : vmState() === "Running";
+  const managed = onSb ? sb.state === "ready" : !!vmEnv("uebung")?.vm;   // Setup setzt die Übungs-VM zurück und startet sie
   let h = `<h2>🎯 Missionen</h2>
     <p class="intro">Echte Störfälle wie im Admin-Alltag. Die App baut den Fehler <b>unbemerkt</b> ein – du findest heraus, was los ist, und reparierst es. Ohne Schritt-für-Schritt-Anleitung.${settings.track === "windows" ? " Missionen mit 🪟 laufen in der Windows-Sandbox." : ""}</p>`;
   if (STATIC) h += `<div class="box warn">Missionen laufen auf deiner eigenen Übungs-VM. ${DEMO_MSG}</div>`;
   else if (currentMission && !managed) h += onSb
     ? `<div class="box warn">Diese Mission läuft in der Windows-Sandbox – die muss laufen. <button data-action="sb-start">▶ Sandbox starten</button></div>`
-    : `<div class="box warn">Diese Mission läuft auf der Übungs-VM – die muss laufen. <button data-action="vm-center">⚙ VM-Zentrale</button></div>`;
+    : `<div class="box warn">Missionen laufen in der <b>🧪 Übungs-VM</b> – einer Wegwerf-VM, damit dein Server heil bleibt. Die gibt es noch nicht. <button data-action="vm-launch" data-target="uebung" class="primary">🚀 Übungs-VM erstellen</button></div>`;
   else if (currentMission && mode !== want) h += `<div class="box warn">Wechsle ins passende Terminal. <button data-mode="${want}">${{ ps: "⚡ Zu PowerShell 7", win: "🪟 Zur Windows-Sandbox", ssh: "🔌 Zur echten VM" }[want]}</button></div>`;
   if (!currentMission) {
     const solved = trackMissions().filter((x) => mState(x.id).solved).length;
     h += `<p class="muted small">${solved} von ${trackMissions().length} gelöst · Tipp: Vor einer Mission einen Snapshot anlegen.</p>`;
-    if (!STATIC && settings.track !== "windows" && env?.snapshots?.some((s) => s.name === "frisch"))
-      h += `<p class="muted small">VM verbastelt? <button class="ghost small" data-action="vm-reset">⟲ VM auf Werkszustand zurücksetzen</button></p>`;
+    if (!STATIC && settings.track !== "windows" && vmEnv("uebung")?.vm)
+      h += `<p class="muted small">Missionen laufen in der 🧪 Übungs-VM; „Mission starten“ setzt sie vorher auf „basis“ zurück. <button class="ghost small" data-action="vm-reset" data-target="uebung">⟲ Jetzt zurücksetzen</button></p>`;
     h += `<ul class="mlist">`;
     for (const mi of trackMissions()) {
       const s = mState(mi.id), open = missionUnlocked(mi);
@@ -1069,7 +1215,7 @@ function renderMissions() {
       <div class="goal"><b>Ziel:</b> ${subIP(mi.goal)}</div>
       <div class="btnrow">
         <button class="primary" data-maction="setup" ${managed ? "" : "disabled"}>${s.started ? "↺ Mission neu vorbereiten" : "▶ Mission starten"}</button>
-        <button data-maction="verify" ${managed && s.started ? "" : "disabled"}>✓ Prüfen</button>
+        <button data-maction="verify" ${managed && s.started && (onSb || vmState("uebung") === "Running") ? "" : "disabled"}>✓ Prüfen</button>
       </div>
       ${missionMsg ? `<pre class="verify ${missionMsg.ok ? "ok" : "bad"}">${escapeHtml(missionMsg.text)}</pre>` : ""}
       <div class="mhints">`;
@@ -1096,13 +1242,16 @@ $("#missions").addEventListener("click", async (e) => {
   const mi = currentMission, s = mState(mi.id);
   if (a === "setup") {
     missionMsg = null;
+    if (mi.target !== "sandbox") disconnectAll();   // Übungs-VM wird zurückgesetzt, ggf. pausiert die Server-VM
     const ok = await startJob(`mission/${mi.id}/setup`, {});
     if (ok) {
       s.started = true; s.hints = 0; saveMissions();
+      if (mi.target !== "sandbox") prepared = null;   // Übungs-VM wurde zurückgesetzt
       missionMsg = { ok: true, text: "Mission vorbereitet. Viel Erfolg! 🕵️" };
       const want = mi.target === "sandbox" ? "win" : vmMode();
       if (mode !== want) setMode(want);
-      if (!remote().connected) { if (want === "win") connectSandbox(); else await connectManaged({ quiet: true }); }
+      if (want === "win") { if (!remote().connected) connectSandbox(); }
+      else { activeVm = "uebung"; await connectManaged({ quiet: true, vm: "uebung" }); }
     } else missionMsg = { ok: false, text: "Vorbereitung fehlgeschlagen – Details in der VM-Zentrale." };
     renderMissions();
   } else if (a === "verify") {
@@ -1477,8 +1626,12 @@ function checkItems() {
     it.push({ ok: env.ramGB >= 8, opt: true, name: "Arbeitsspeicher", info: `${env.ramGB || "?"} GB`, fix: "Unter 8 GB wird es eng: die VM pausieren, wenn du sie nicht brauchst." });
   }
   it.push({ ok: !!env.multipass?.installed, name: "Multipass", info: env.multipass?.installed ? `Version ${env.multipass.version || "?"}` : "nicht installiert", fix: "VM-Zentrale → „Multipass installieren“ (oder von multipass.run)." });
-  it.push({ ok: !!env.vm, name: "Übungs-VM fis-lab", info: env.vm ? { Running: "läuft", Stopped: "aus", Suspended: "pausiert" }[env.vm.state] || env.vm.state : "noch nicht erstellt", fix: "VM-Zentrale → „🚀 VM erstellen“ (einmalig, ca. 5–10 Minuten)." });
-  if (env.vm) it.push({ ok: env.snapshots.some((s) => s.name === "frisch"), opt: true, name: "Werkszustand-Snapshot", info: env.snapshots.some((s) => s.name === "frisch") ? "vorhanden" : "fehlt", fix: "VM-Zentrale → „📸 Als frisch sichern“ – dann kannst du die VM jederzeit zurücksetzen." });
+  for (const id of VM_IDS) {
+    const v = vmEnv(id)?.vm, base = VM_INFO[id].base;
+    it.push({ ok: !!v, name: `${VM_PLAIN[id]} ${vmEnv(id)?.name || ""}`, info: v ? { Running: "läuft", Stopped: "aus", Suspended: "pausiert" }[v.state] || v.state : "noch nicht erstellt",
+      fix: `VM-Zentrale → „🚀 ${VM_PLAIN[id]} erstellen“ (einmalig, ca. 5–10 Minuten). ${id === "uebung" ? "Für Übungen und Missionen." : "Für die geführten Installationen."}` });
+    if (v) it.push({ ok: hasSnap(id, base), opt: true, name: `Snapshot „${base}“`, info: hasSnap(id, base) ? "vorhanden" : "fehlt", fix: `VM-Zentrale → „📸 Als „${base}“ sichern“ – dann kannst du die VM jederzeit zurücksetzen.` });
+  }
   if (env.platform === "win32") it.push({ ok: ["off", "ready", "starting"].includes(sb.state), opt: true, name: "Windows-Sandbox", info: { unavailable: "nicht aktiviert", off: "bereit", ready: "läuft", starting: "startet" }[sb.state] || "unbekannt",
     fix: "Nur Windows Pro/Enterprise: „Windows-Features aktivieren oder deaktivieren“ → „Windows-Sandbox“, dann neu starten. Nötig nur für die 🪟-Lektionen." });
   return it;
@@ -1486,12 +1639,13 @@ function checkItems() {
 function renderCheck() {
   const it = checkItems();
   const can = ["🖥 Mini-Linux, 🔁 Training, 🏴 Wargame und 🎓 Prüfung"];
-  if (env?.vm) can.push("🔌 Echte VM: Teil 2–7, alle 🎯 Linux-Missionen", "⚡ PowerShell 7 (Windows-Kurs Teil 1, 2, 4)");
+  if (vmEnv("uebung")?.vm) can.push("🧪 Übungs-VM: Übungen (②) und alle 🎯 Linux-Missionen");
+  if (vmEnv("server")?.vm) can.push("🖥 Server-VM: Teil 2–8, geführte Installationen (③)", "⚡ PowerShell 7 (Windows-Kurs Teil 1, 2, 4)");
   if (["off", "ready", "starting"].includes(sb.state)) can.push("🪟 Windows-Sandbox (Windows-Kurs Teil 3)");
   $("#check-body").innerHTML = `<ul class="checks">${it.map((x) => `<li>${x.ok ? `<span class="ok">✓</span>` : x.opt ? `<span class="opt">!</span>` : `<span class="bad">✗</span>`}
       <b>${x.name}</b> <span class="muted">${escapeHtml(x.info)}</span>${x.ok ? "" : `<br><small>${x.fix}</small>`}</li>`).join("")}</ul>
     <div class="box info"><b>Damit kannst du nutzen:</b><ul>${can.map((c) => `<li>${c}</li>`).join("")}</ul></div>
-    ${!STATIC && !env?.vm && env ? `<div class="btnrow"><button class="primary" data-check="vm">⚙ Zur VM-Zentrale</button></div>` : ""}`;
+    ${!STATIC && !VM_IDS.some((id) => vmEnv(id)?.vm) && env ? `<div class="btnrow"><button class="primary" data-check="vm">⚙ Zur VM-Zentrale</button></div>` : ""}`;
 }
 async function openCheck() {
   if (!$("#check-dialog").open) $("#check-dialog").showModal();
