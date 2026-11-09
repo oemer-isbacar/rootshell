@@ -4,7 +4,7 @@
  */
 window.LESSONS.push(
 {
-  id: "dev1-git", mode: "ssh", group: "devops", title: "Git: Versionen verwalten",
+  id: "dev1-git", mode: "ssh", vm: "uebung", topic: "devops", stage: 2, group: "devops", title: "Git: Versionen verwalten",
   intro: `Git speichert jeden Stand deiner Dateien als <b>Commit</b>. Admins versionieren damit Skripte und Konfigurationen: Wer hat was wann geändert, und wie komme ich zum letzten funktionierenden Stand zurück?`,
   steps: [
     { title: "Wer bist du?", text: `Jeder Commit trägt Name und E-Mail. Das stellst du einmal ein:`,
@@ -26,7 +26,7 @@ window.LESSONS.push(
   ],
 },
 {
-  id: "dev2-branch", mode: "ssh", group: "devops", title: "Git: Branches & Zusammenführen",
+  id: "dev2-branch", mode: "ssh", vm: "uebung", topic: "devops", stage: 2, prep: `sudo -u ubuntu -H bash -c 'git config --global user.name "Azubi"; git config --global user.email "azubi@example.com"; git config --global init.defaultBranch main; mkdir -p ~/skripte && cd ~/skripte && git init -q && printf "%s\n" "#!/bin/bash" "tar czf /tmp/etc.tgz /etc" > backup.sh && git add backup.sh && git commit -qm "Backup-Skript angelegt" && echo "echo Backup fertig" >> backup.sh && git commit -qam "Meldung am Ende"'`, group: "devops", title: "Git: Branches & Zusammenführen",
   intro: `Ein <b>Branch</b> ist eine eigene Entwicklungslinie. Neue Ideen probierst du dort aus, ohne den funktionierenden Stand auf <code>main</code> zu gefährden.`,
   steps: [
     { title: "Branch anlegen und wechseln", cmd: ["cd ~/skripte", "git switch -c log-funktion", "git branch"], check: { cmd: /git\s+branch|git\s+switch/, out: /\* log-funktion/ } },
@@ -42,7 +42,7 @@ window.LESSONS.push(
   outro: `Ein Repository auf einem Server (GitHub, GitLab oder dein eigenes <b>Gitea</b> aus Teil 3) erreichst du mit <code>git remote add origin URL</code>, <code>git push</code> und <code>git pull</code>.`,
 },
 {
-  id: "dev3-dockerfile", mode: "ssh", group: "devops", title: "Docker: eigene Images bauen",
+  id: "dev3-dockerfile", mode: "ssh", vm: "uebung", topic: "devops", stage: 2, group: "devops", title: "Docker: eigene Images bauen",
   intro: `Ein <b>Image</b> ist die Vorlage, ein <b>Container</b> eine laufende Kopie davon. Mit einem <code>Dockerfile</code> beschreibst du ein eigenes Image – reproduzierbar, auf jedem Rechner gleich.`,
   steps: [
     { title: "Docker bereit?", text: `Falls Docker aus Teil 2 noch fehlt, wird es jetzt installiert. Wir nutzen hier <code>sudo docker</code>, dann musst du dich nicht neu anmelden.`,
@@ -64,7 +64,7 @@ cat Dockerfile`, check: { cmd: /Dockerfile/, out: /FROM nginx/ },
   ],
 },
 {
-  id: "dev4-volumes", mode: "ssh", group: "devops", title: "Docker: Volumes & Netzwerke",
+  id: "dev4-volumes", mode: "ssh", vm: "uebung", topic: "devops", stage: 2, prep: `export DEBIAN_FRONTEND=noninteractive; command -v docker >/dev/null || { echo "Installiere Docker …"; apt-get update -qq && apt-get install -y -qq docker.io >/dev/null; }; systemctl enable --now docker >/dev/null 2>&1; docker pull -q alpine >/dev/null`, group: "devops", title: "Docker: Volumes & Netzwerke",
   intro: `Container sind <b>wegwerfbar</b>: Löschst du einen, ist alles darin weg. Daten, die bleiben sollen, kommen in ein <b>Volume</b>. Und damit Container sich gegenseitig finden, gibt es eigene <b>Netzwerke</b>.`,
   steps: [
     { title: "Ohne Volume: Daten weg", cmd: ["sudo docker run --name test alpine sh -c 'echo wichtig > /daten.txt'", "sudo docker rm test", "sudo docker run --rm alpine cat /daten.txt"],
