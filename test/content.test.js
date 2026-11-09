@@ -181,8 +181,9 @@ test("Subnetting-Aufgaben rechnen richtig", () => {
 /* SQL-Lektionen: jede Musterlösung läuft fehlerfrei gegen die Fall-Datenbank (sql.js wie im Browser)
  * und besteht die eigene Schrittprüfung – mit derselben Fehlererkennung wie die App. */
 test("SQL-Krimi: Musterlösungen bestehen ihre Prüfung", async () => {
-  const initSqlJs = require("sql.js");
-  const SQL = await initSqlJs();
+  // sql.js aus lib/ laden (wie im Browser) – die CI läuft ohne npm install, node_modules gibt es dort nicht
+  const initSqlJs = require(path.join(ROOT, "lib", "sql-wasm.js"));
+  const SQL = await initSqlJs({ locateFile: (f) => path.join(ROOT, "lib", f) });
   const [, reSrc, reFlags] = appJs.match(/const ERR_LINE_RE = \/(.*)\/(\w*);/);
   const ERR = new RegExp(reSrc, reFlags);
   const errorLines = (out) => out.split("\n").filter((l) => ERR.test(l)).join("\n");
