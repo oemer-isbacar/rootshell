@@ -276,4 +276,97 @@ EOF`, check: { cmd: /sites-available\/wordpress/ } },
   ],
   outro: `Du hast den ganzen Weg gemacht: SQL im Krimi gelernt, an einer Übungsdatenbank geübt und jetzt an einer echten Anwendung angewendet. Bereit für ④? Die Datenbank-Störfälle warten im Tab 🎯 Missionen.`,
 },
+
+/* ---------- ③ Anwenden: Gitea mit eigener MariaDB im Container (Ports 3010/2223, neben der SQLite-Gitea aus Teil 3) ---------- */
+{
+  id: "db3-gitea-mariadb", mode: "ssh", vm: "server", group: "db", topic: "db", stage: 3, title: "Gitea mit MariaDB-Container",
+  intro: `In Teil 3 läuft Gitea mit <b>SQLite</b> – eine Datei, kein Datenbankserver. Für ein Team oder viele Repositories nimmt man einen echten Datenbankserver. Heute läuft der meist
+    <b>als eigener Container neben der Anwendung</b>: Beide stehen in einer Compose-Datei, die Anwendung findet die Datenbank über den Dienstnamen. Diese Gitea bekommt eigene Ports (3010 und 2223),
+    damit sie der aus Teil 3 nicht in die Quere kommt.`,
+  steps: [
+    { title: "Docker installieren",
+      text: `Falls du die Docker-Lektion schon gemacht hast, ist alles da. Wir rufen Docker hier mit <code>sudo</code> auf – so funktioniert es auch ohne Mitgliedschaft in der Gruppe <code>docker</code>.`,
+      cmd: "sudo apt install -y docker.io docker-compose-v2 && sudo docker --version && sudo docker compose version",
+      check: { cmd: /apt(-get)?\s+install\s.*docker/, out: /Docker Compose version/ } },
+    { title: "Compose-Datei mit zwei Diensten",
+      text: `<b>db</b> ist MariaDB, <b>gitea</b> die Anwendung. Achte auf drei Dinge: Gitea erreicht die Datenbank unter dem Namen <code>db</code> (Compose legt dafür ein eigenes Netz an),
+        die Zugangsdaten stehen auf beiden Seiten gleich, und <code>depends_on … service_healthy</code> startet Gitea erst, wenn MariaDB wirklich bereit ist.
+        <code>INSTALL_LOCK=true</code> überspringt den Installationsassistenten.`,
+      cmd: `mkdir -p ~/selfhost/gitea-db && cd ~/selfhost/gitea-db && cat > compose.yaml << 'EOF'
+services:
+  db:
+    image: mariadb:11
+    container_name: gitea-mariadb
+    environment:
+      MARIADB_ROOT_PASSWORD: Root_2026_geheim
+      MARIADB_DATABASE: gitea
+      MARIADB_USER: gitea
+      MARIADB_PASSWORD: Gitea_2026_geheim
+    volumes:
+      - ./mariadb:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      retries: 30
+    restart: unless-stopped
+
+  gitea:
+    image: gitea/gitea:1.22
+    container_name: gitea-db
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+      - GITEA__database__DB_TYPE=mysql
+      - GITEA__database__HOST=db:3306
+      - GITEA__database__NAME=gitea
+      - GITEA__database__USER=gitea
+      - GITEA__database__PASSWD=Gitea_2026_geheim
+      - GITEA__security__INSTALL_LOCK=true
+      - GITEA__server__ROOT_URL=http://{{IP}}:3010/
+    ports:
+      - "3010:3000"
+      - "2223:22"
+    volumes:
+      - ./gitea:/data
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+EOF`, check: { cmd: /gitea-db.*compose\.yaml|compose\.yaml/ },
+      explain: `Passwörter direkt in der Compose-Datei sind fürs Lab in Ordnung. Auf echten Servern gehören sie in eine <code>.env</code>-Datei (nicht ins Git!) oder in Docker-Secrets.` },
+    { title: "Starten – und warten, bis alles bereit ist",
+      text: `<code>--wait</code> wartet auf den Healthcheck der Datenbank. Danach fragen wir Gitea selbst, bis es antwortet. Beim ersten Mal werden die Images geladen (1–2 Minuten).`,
+      cmd: `cd ~/selfhost/gitea-db && sudo docker compose up -d --wait && for i in $(seq 60); do curl -sf http://localhost:3010/api/healthz >/dev/null && break; sleep 2; done; sudo docker compose ps`,
+      check: { cmd: /compose\s+up/, out: /healthy/ } },
+    { title: "Hat Gitea seine Tabellen angelegt?",
+      text: `Beim ersten Start legt Gitea alle Tabellen selbst in MariaDB an. Mit <code>docker exec</code> führst du einen Befehl <b>im</b> Datenbank-Container aus:`,
+      cmd: `sudo docker exec gitea-mariadb mariadb -u gitea -pGitea_2026_geheim gitea -e "SHOW TABLES;" | grep -E "^(user|repository|issue)$"`,
+      check: { cmd: /docker\s+exec/, out: /repository/ },
+      explain: `Gitea hat über 100 Tabellen angelegt. Die Datenbank liegt im Ordner <code>~/selfhost/gitea-db/mariadb</code> – ein Bind-Mount, also auch nach einem <code>docker compose down</code> noch da.` },
+    { title: "Admin-Konto per Kommandozeile",
+      text: `Ohne Installationsassistent legst du den ersten Admin mit der Gitea-CLI im Container an (als Benutzer <code>git</code>, unter dem Gitea dort läuft):`,
+      cmd: `sudo docker exec -u git gitea-db gitea admin user create --admin --username azubi --password 'Azubi_2026_sicher' --email azubi@lab.local --must-change-password=false`,
+      check: { cmd: /admin\s+user\s+create/, out: /created|already exists/i } },
+    { title: "Repository über die API anlegen",
+      text: `Fast alles in Gitea geht auch per <b>REST-API</b> – so automatisiert man Einrichtungen per Skript:`,
+      cmd: `curl -s -u azubi:Azubi_2026_sicher -X POST -H "Content-Type: application/json" -d '{"name":"homelab","description":"Meine Server-Konfiguration"}' http://localhost:3010/api/v1/user/repos | grep -o '"full_name":"[^"]*"'`,
+      check: { cmd: /api\/v1\/user\/repos/, out: /azubi\/homelab/ },
+      explain: `Öffne <a href="http://{{IP}}:3010/azubi/homelab" target="_blank">http://{{IP}}:3010/azubi/homelab</a> – dein Repo ist da. Anmelden mit <code>azubi</code> / <code>Azubi_2026_sicher</code>.` },
+    { title: "SQL: Wer ist angelegt?",
+      text: `Die Tabelle heißt <code>user</code> – ein Wort, das in SQL auch eine Bedeutung hat. Deshalb steht sie in <b>Backticks</b>. Die SQL-Anweisung steht in einfachen Anführungszeichen, sonst würde die Shell die Backticks als Befehl ausführen.`,
+      cmd: `sudo docker exec gitea-mariadb mariadb -u gitea -pGitea_2026_geheim gitea -e 'SELECT id, name, email, is_admin FROM \`user\`;'`,
+      check: { cmd: /from\s+`user`/i, out: /azubi/ } },
+    { title: "SQL: Repositories mit Besitzer (JOIN)",
+      cmd: `sudo docker exec gitea-mariadb mariadb -u gitea -pGitea_2026_geheim gitea -e 'SELECT r.name AS repo, u.name AS besitzer, r.is_private FROM repository r JOIN \`user\` u ON u.id = r.owner_id;'`,
+      check: { cmd: /join/i, out: /homelab/ },
+      explain: `Solche Abfragen helfen bei Auswertungen („Welche Repos sind öffentlich?“). Ändern solltest du in der Datenbank einer laufenden Anwendung aber nur, was du genau verstehst – die Weboberfläche und die API prüfen Regeln, die SQL einfach umgeht.` },
+    { title: "Sicherung aus dem Container heraus",
+      text: `<code>mariadb-dump</code> läuft im Container, die Ausgabe landet über die Pipe auf dem Host:`,
+      cmd: "sudo docker exec gitea-mariadb mariadb-dump -u root -pRoot_2026_geheim gitea | gzip > ~/gitea-db-$(date +%F).sql.gz && ls -lh ~/gitea-db-*.sql.gz",
+      check: { cmd: /mariadb-dump|mysqldump/, out: /gitea-db-.*\.sql\.gz/ },
+      explain: `Zur vollständigen Gitea-Sicherung gehört auch <code>~/selfhost/gitea-db/gitea</code> (die Git-Repositories selbst). Gitea bringt dafür <code>gitea dump</code> mit.
+        <br><b>Umzug von SQLite:</b> <code>gitea dump --database mysql</code> erzeugt die Daten einer SQLite-Installation als SQL für MariaDB/MySQL – einspielen, <code>app.ini</code> auf <code>mysql</code> umstellen, fertig.` },
+  ],
+  outro: `Das ist das Muster fast aller modernen Selbst-Hosting-Dienste (Nextcloud, Paperless, Bookstack …): Anwendung und Datenbank als Container, verbunden über den Dienstnamen, Daten in Volumes – und Sicherungen per <code>docker exec … dump</code>.`,
+},
 );
