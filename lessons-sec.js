@@ -3,8 +3,40 @@
  * Angriffsfläche prüfen, härten, Spuren in Logs lesen, patchen. Keine Angriffe auf fremde Systeme.
  */
 window.LESSONS.push(
+/* ① Lernen im Mini-Linux: Ein Angriff in einem Beispiel-Log – die Daten legt prep unsichtbar an */
 {
-  id: "sec1-recht", mode: "ssh", group: "sec", title: "Spielregeln & Angriffsfläche",
+  id: "sec0-mini", mode: "browser", group: "sec", topic: "sec", stage: 1, title: "Logs auswerten im Mini-Linux: Ein Angriff",
+  intro: `Ein Server stand eine Nacht lang offen im Internet. In <code>/var/log/auth.log</code> steht, wer sich per SSH anmelden wollte. Mit <code>grep</code>, <code>awk</code>, <code>sort</code> und <code>uniq</code>
+    findest du heraus, was passiert ist – dieselben Werkzeuge, mit denen Admins echte Vorfälle auswerten. Klick zuerst auf „Übungsdaten bereitstellen“.`,
+  prep: `L=/var/log/auth.log; mkdir -p /var/log; : > $L
+p() { printf '%02d' "$1"; }
+for n in $(seq 1 60); do u="invalid user admin"; [ $((n%3)) = 0 ] && u=root; [ $((n%5)) = 0 ] && u="invalid user test"; echo "Nov  8 03:$(p $((10+n/2))):$(p $((n*7%60))) fis-lab sshd[$((4000+n))]: Failed password for $u from 203.0.113.45 port $((40000+n)) ssh2" >> $L; done
+echo "Nov  8 03:41:07 fis-lab sshd[4099]: Accepted password for root from 203.0.113.45 port 40099 ssh2" >> $L
+for n in $(seq 1 25); do echo "Nov  8 04:$(p $((n*2))):$(p $((n*13%60))) fis-lab sshd[$((5000+n))]: Failed password for invalid user oracle from 198.51.100.23 port $((50000+n)) ssh2" >> $L; done
+echo "Nov  8 07:55:12 fis-lab sshd[6001]: Accepted publickey for ubuntu from 192.168.10.20 port 51022 ssh2" >> $L
+for n in 1 2 3; do echo "Nov  8 08:01:0$n fis-lab sshd[$((6100+n))]: Failed password for ubuntu from 192.168.10.34 port 5330$n ssh2" >> $L; done
+echo "Nov  8 08:01:09 fis-lab sshd[6104]: Accepted password for ubuntu from 192.168.10.34 port 53304 ssh2" >> $L`,
+  steps: [
+    { title: "Ein Blick ins Log", text: `Die letzten Zeilen zeigen das Format: Datum, Rechner, Dienst mit Prozess-ID, Meldung.`,
+      cmd: "tail -5 /var/log/auth.log", check: { cmd: /auth\.log/, out: /sshd\[/ } },
+    { title: "Wie viele Fehlversuche?", text: `<code>grep -c</code> zählt die passenden Zeilen, statt sie auszugeben.`,
+      cmd: `grep -c "Failed password" /var/log/auth.log`, check: { cmd: /grep\s+-c/, out: /^88$/m },
+      explain: `88 fehlgeschlagene Anmeldungen in einer Nacht – das ist kein Tippfehler mehr, das ist ein <b>Brute-Force-Angriff</b>.` },
+    { title: "Von wo kamen sie?", text: `Die IP-Adresse steht immer an derselben Stelle: das viertletzte Feld. <code>awk '{print $(NF-3)}'</code> schneidet sie heraus, <code>sort | uniq -c</code> zählt, <code>sort -rn</code> sortiert absteigend.`,
+      cmd: `grep "Failed password" /var/log/auth.log | awk '{print $(NF-3)}' | sort | uniq -c | sort -rn`,
+      check: { cmd: /uniq\s+-c/, out: /60\s+203\.0\.113\.45/ },
+      explain: `Zwei Angreifer (203.0.113.45 und 198.51.100.23) – und drei Fehlversuche aus dem eigenen Netz (192.168.10.34), vermutlich jemand mit Tippfehler.` },
+    { title: "Deine Aufgabe: War ein Angriff erfolgreich?",
+      task: `Finde heraus, ob sich eine der Angreifer-IPs <b>erfolgreich</b> angemeldet hat – und mit welchem Benutzer.`,
+      hint: `Erfolgreiche Anmeldungen enthalten das Wort <code>Accepted</code>.`,
+      solution: `grep "Accepted" /var/log/auth.log`,
+      check: { cmd: /accepted/i, out: /root from 203\.0\.113\.45/ },
+      explain: `<b>Ja – um 03:41 als root.</b> Nach 60 Versuchen hat der Angreifer das Passwort erraten. Jetzt hilft nur noch ein Vorfall-Runbook: Server vom Netz, Beweise sichern, neu aufsetzen.
+        Verhindert hätten es: <code>PermitRootLogin no</code>, Anmeldung nur mit Schlüssel und <code>fail2ban</code> – das richtest du in den nächsten Lektionen auf echten VMs ein.` },
+  ],
+},
+{
+  id: "sec1-recht", mode: "ssh", vm: "uebung", topic: "sec", stage: 2, group: "sec", title: "Spielregeln & Angriffsfläche",
   intro: `Willkommen im Security-Teil. Hier lernst du die <b>Verteidiger-Seite</b> (Blue Team): Du prüfst, härtest und überwachst Systeme. Gearbeitet wird <b>ausschließlich auf deiner eigenen Übungs-VM</b>.`,
   steps: [
     { title: "Die wichtigste Regel zuerst", text: `Die Werkzeuge hier (Portscanner, Log-Analyse) darfst du <b>nur auf eigenen Systemen oder mit ausdrücklicher schriftlicher Erlaubnis</b> einsetzen. Ein Portscan gegen fremde Rechner ist in Deutschland strafbar (u. a. §§ 202a–c, 303b StGB). In echten Pentests gibt es immer einen schriftlichen Auftrag mit klarem „Scope".<br><br>Bestätige, dass du das gelesen hast:`,
@@ -23,7 +55,7 @@ window.LESSONS.push(
   ],
 },
 {
-  id: "sec2-ssh", mode: "ssh", group: "sec", title: "SSH härten",
+  id: "sec2-ssh", mode: "ssh", vm: "server", topic: "sec", stage: 3, group: "sec", title: "SSH härten",
   intro: `SSH ist auf fast jedem Server offen und damit das häufigste Angriffsziel. Ein paar Einstellungen machen es deutlich sicherer. Änderungen kommen in eine eigene Datei unter <code>/etc/ssh/sshd_config.d/</code> – so bleibt die Originaldatei unberührt.`,
   steps: [
     { title: "Aktuelle Einstellungen ansehen", text: `<code>sshd -T</code> zeigt die <b>tatsächlich wirksame</b> Konfiguration (inklusive Standardwerte).`,
@@ -43,7 +75,7 @@ EOF`, check: { cmd: /90-haertung\.conf/ },
   ],
 },
 {
-  id: "sec3-firewall", mode: "ssh", group: "sec", title: "Firewall & Einbruchschutz",
+  id: "sec3-firewall", mode: "ssh", vm: "server", topic: "sec", stage: 3, group: "sec", title: "Firewall & Einbruchschutz",
   intro: `Zwei Bausteine, die auf fast jeden Server gehören: eine <b>Firewall</b>, die nur erlaubt, was gebraucht wird, und <b>fail2ban</b>, das Angreifer nach zu vielen Fehlversuchen automatisch aussperrt.`,
   steps: [
     { title: "SSH zuerst erlauben!", text: `Ganz wichtig: Bevor du die Firewall einschaltest, erlaubst du SSH – sonst kappst du deine eigene Verbindung.`,
@@ -67,7 +99,7 @@ sudo systemctl restart fail2ban`, check: { cmd: /jail\.local/ } },
   ],
 },
 {
-  id: "sec4-logs", mode: "ssh", group: "sec", title: "Spuren in Logs lesen",
+  id: "sec4-logs", mode: "ssh", vm: "uebung", topic: "sec", stage: 2, group: "sec", title: "Spuren in Logs lesen",
   intro: `Wenn etwas passiert ist, steht es im Log. Ein Admin muss Anmeldungen, Fehlversuche und verdächtige Muster schnell finden. Unter Ubuntu sammelt <code>journald</code> alles; <code>journalctl</code> durchsucht es.`,
   steps: [
     { title: "Wer hat sich angemeldet?", cmd: "last -n 10", check: { cmd: /^last/, out: /\w/ },
@@ -87,7 +119,7 @@ sudo systemctl restart fail2ban`, check: { cmd: /jail\.local/ } },
   ],
 },
 {
-  id: "sec5-patch", mode: "ssh", group: "sec", title: "Updates & Schwachstellen (CVEs)",
+  id: "sec5-patch", mode: "ssh", vm: "server", topic: "sec", stage: 3, group: "sec", title: "Updates & Schwachstellen (CVEs)",
   intro: `Die meisten echten Einbrüche nutzen <b>bekannte</b> Lücken, für die längst ein Update existiert. Patchmanagement ist deshalb die wirksamste einzelne Schutzmaßnahme.`,
   steps: [
     { title: "Paketlisten aktualisieren", cmd: "sudo apt-get update", check: { cmd: /apt(-get)?\s+update/ } },
@@ -101,7 +133,7 @@ sudo systemctl restart fail2ban`, check: { cmd: /jail\.local/ } },
   ],
 },
 {
-  id: "sec6-backup", mode: "ssh", group: "sec", title: "Backup & Wiederherstellung",
+  id: "sec6-backup", mode: "ssh", vm: "server", topic: "sec", stage: 3, group: "sec", title: "Backup & Wiederherstellung",
   intro: `Gegen Ransomware, Hardwaredefekte und Bedienfehler hilft am Ende nur eines: ein <b>funktionierendes Backup</b>. Und „funktionierend" heißt: Du hast die Wiederherstellung schon einmal ausprobiert.`,
   steps: [
     { title: "Etwas Wichtiges anlegen", cmd: "sudo mkdir -p /srv/firma && echo 'Kundenliste 2026' | sudo tee /srv/firma/kunden.txt", check: { cmd: /\/srv\/firma/, out: /Kundenliste/ } },
@@ -117,7 +149,7 @@ sudo systemctl restart fail2ban`, check: { cmd: /jail\.local/ } },
   ],
 },
 {
-  id: "sec7-vorfall", mode: "ssh", group: "sec", title: "Sicherheitsvorfall: Runbook & Auswertung",
+  id: "sec7-vorfall", mode: "ssh", vm: "uebung", topic: "sec", stage: 2, group: "sec", title: "Sicherheitsvorfall: Runbook & Auswertung",
   intro: `Wenn es brennt, ist keine Zeit zum Nachdenken. Profis haben ein <b>Runbook</b>: eine Checkliste, was in welcher Reihenfolge zu tun ist. Und sie werten Logs so aus, dass Muster sofort auffallen – im Kleinen genau das, was ein <b>SIEM</b> macht.`,
   steps: [
     { title: "Ein Runbook schreiben", text: `Markdown ist das übliche Format – lesbar als Text und hübsch in jedem Wiki.`,

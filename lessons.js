@@ -9,7 +9,7 @@ window.LESSONS = [
 /* TEIL 1 – GRUNDLAGEN IM MINI-LINUX                                     */
 /* ===================================================================== */
 {
-  id: "b1-start", mode: "browser", title: "Erste Schritte in der Shell",
+  id: "b1-start", mode: "browser", topic: "linux", stage: 1, title: "Erste Schritte in der Shell",
   intro: `Links läuft ein <b>echtes Linux</b> (Kernel 6.x + BusyBox) – direkt in deinem Browser. Du kannst nichts kaputt machen: Notfalls oben auf „Neu starten“. Die Zeile <code>~ #</code> ist der <b>Prompt</b>: <code>~</code> = du bist in deinem Home-Verzeichnis, <code>#</code> = du bist <b>root</b> (Administrator).`,
   steps: [
     { title: "Wer bin ich?", text: `Tippe den Befehl ins Terminal und drück <kbd>Enter</kbd>. Du kannst auch „übernehmen“ klicken – Enter drückst du dann selbst.`,
@@ -31,7 +31,7 @@ window.LESSONS = [
   outro: `💡 <b>Tab-Vervollständigung</b>: Tippe <code>cat /etc/os</code> und drück <kbd>Tab</kbd> – die Shell ergänzt den Rest. Mit <kbd>↑</kbd> holst du alte Befehle zurück.`,
 },
 {
-  id: "b2-nav", mode: "browser", title: "Im Dateisystem navigieren",
+  id: "b2-nav", mode: "browser", topic: "linux", stage: 1, title: "Im Dateisystem navigieren",
   intro: `Linux hat <b>einen</b> Verzeichnisbaum, der bei <code>/</code> (Root-Verzeichnis) beginnt – keine Laufwerksbuchstaben wie C:\\. Festplatten werden irgendwo in diesen Baum „eingehängt“ (gemountet).`,
   steps: [
     { title: "Zur Wurzel", cmd: "cd /", check: { cmd: /^cd\s+\/$/ } },
@@ -58,7 +58,7 @@ window.LESSONS = [
   ],
 },
 {
-  id: "b3-files", mode: "browser", title: "Dateien & Ordner verwalten",
+  id: "b3-files", mode: "browser", topic: "linux", stage: 1, title: "Dateien & Ordner verwalten",
   intro: `Die Werkzeuge, die du jeden Tag brauchst: anlegen, kopieren, verschieben, löschen. Achtung: Es gibt <b>keinen Papierkorb</b> – <code>rm</code> löscht sofort.`,
   steps: [
     { title: "Ordner anlegen", text: `<code>-p</code> legt auch fehlende Elternordner mit an.`, cmd: "mkdir -p projekte/webseite",
@@ -80,7 +80,7 @@ window.LESSONS = [
   ],
 },
 {
-  id: "b4-read", mode: "browser", title: "Dateien lesen & durchsuchen",
+  id: "b4-read", mode: "browser", topic: "linux", stage: 1, title: "Dateien lesen & durchsuchen",
   intro: `Logs und Konfigdateien lesen, gezielt suchen – das ist im Admin-Alltag die halbe Miete.`,
   steps: [
     { title: "Benutzerliste lesen", text: `In <code>/etc/passwd</code> steht jeder Benutzer in einer Zeile.`, cmd: "cat /etc/passwd", check: { cmd: /\/etc\/passwd/, out: /root:/ },
@@ -99,7 +99,7 @@ window.LESSONS = [
   ],
 },
 {
-  id: "b5-pipes", mode: "browser", title: "Pipes & Umleitungen",
+  id: "b5-pipes", mode: "browser", topic: "linux", stage: 1, title: "Pipes & Umleitungen",
   intro: `Die Stärke von Linux: kleine Werkzeuge, die man mit <code>|</code> (Pipe) verkettet. Die Ausgabe des einen wird zur Eingabe des nächsten.`,
   steps: [
     { title: "Erste Pipe", text: `Wie viele Einträge hat <code>/etc</code>?`, cmd: "ls /etc | wc -l", check: { cmd: /\|\s*wc/ } },
@@ -117,7 +117,7 @@ window.LESSONS = [
   ],
 },
 {
-  id: "b6-perms", mode: "browser", title: "Benutzer & Rechte",
+  id: "b6-perms", mode: "browser", topic: "linux", stage: 1, title: "Benutzer & Rechte",
   intro: `Jede Datei gehört einem <b>Benutzer</b> und einer <b>Gruppe</b>. Rechte gibt es für drei Klassen: <b>u</b>ser (Besitzer), <b>g</b>roup, <b>o</b>thers – jeweils <b>r</b>ead, <b>w</b>rite, e<b>x</b>ecute.`,
   steps: [
     { title: "Rechte ansehen", cmd: "ls -l /etc/passwd /etc/shadow", check: { cmd: /^ls\s+-l/ },
@@ -139,7 +139,7 @@ window.LESSONS = [
   outro: `🎓 <b>Prüfungsklassiker:</b> SUID (4), SGID (2), Sticky-Bit (1) – z. B. <code>chmod 1777 /tmp</code>. Schau dir <code>ls -ld /tmp</code> an: das <code>t</code> am Ende ist das Sticky-Bit (nur der Besitzer darf seine Dateien löschen).`,
 },
 {
-  id: "b7-proc", mode: "browser", title: "Prozesse",
+  id: "b7-proc", mode: "browser", topic: "linux", stage: 1, title: "Prozesse",
   intro: `Jedes laufende Programm ist ein Prozess mit einer eindeutigen <b>PID</b>.`,
   steps: [
     { title: "Prozesse anzeigen", cmd: "ps", check: { cmd: /^ps\b/, out: /PID/ },
@@ -153,7 +153,7 @@ window.LESSONS = [
   ],
 },
 {
-  id: "b8-vi", mode: "browser", title: "Der Editor vi",
+  id: "b8-vi", mode: "browser", topic: "linux", stage: 1, title: "Der Editor vi",
   intro: `<code>vi</code> (bzw. <code>vim</code>) ist auf praktisch jedem Linux vorhanden – du musst ihn mindestens überleben können. Er hat <b>Modi</b>: Normalmodus (Befehle) und Einfügemodus (Text tippen).`,
   steps: [
     { title: "Datei öffnen", cmd: "vi test.txt", text: `<ol><li><kbd>i</kbd> drücken → Einfügemodus (unten steht „I“)</li><li>Text tippen</li><li><kbd>Esc</kbd> → zurück in den Normalmodus</li><li><code>:wq</code> + <kbd>Enter</kbd> → speichern & beenden</li></ol>`,
@@ -172,7 +172,7 @@ window.LESSONS = [
   ],
 },
 {
-  id: "b9-script", mode: "browser", title: "Shell-Skripte",
+  id: "b9-script", mode: "browser", topic: "script", stage: 1, title: "Shell-Skripte",
   intro: `Alles, was du tippst, kannst du auch in eine Datei schreiben und automatisieren. Mehrzeiligen Text schreibst du bequem mit einem <b>Here-Document</b> (<code>&lt;&lt; 'EOF'</code> … <code>EOF</code>).`,
   steps: [
     { title: "Variablen", cmd: ['NAME="Ömer"', 'echo "Hallo $NAME"'], check: { cmd: /^echo\s.*\$\w+/ },
@@ -199,7 +199,7 @@ EOF`, check: { cmd: /backup\.sh/ },
   ],
 },
 {
-  id: "b10-sys", mode: "browser", title: "System & Archive",
+  id: "b10-sys", mode: "browser", topic: "linux", stage: 1, title: "System & Archive",
   intro: `Speicher, Laufzeit, Hardware – und Dateien packen. Das brauchst du beim Troubleshooting ständig.`,
   steps: [
     { title: "Plattenplatz", text: `<code>-h</code> = „human readable“ (MB/GB statt Blöcke).`, cmd: "df -h", check: { cmd: /^df\b/ } },
@@ -236,7 +236,7 @@ EOF`, check: { cmd: /backup\.sh/ },
   ],
 },
 {
-  id: "v1-apt", mode: "ssh", title: "Paketverwaltung mit apt",
+  id: "v1-apt", mode: "ssh", vm: "uebung", topic: "linux", stage: 2, title: "Paketverwaltung mit apt",
   intro: `Software kommt unter Debian/Ubuntu aus <b>Paketquellen</b> (Repositories) und wird mit <code>apt</code> verwaltet. Abhängigkeiten löst apt automatisch auf. Für Admin-Aufgaben brauchst du <code>sudo</code>.`,
   steps: [
     { title: "Paketlisten aktualisieren", text: `<code>update</code> lädt nur die Liste verfügbarer Pakete neu – es installiert nichts.`, cmd: "sudo apt update",
@@ -254,7 +254,7 @@ EOF`, check: { cmd: /backup\.sh/ },
   ],
 },
 {
-  id: "v2-users", mode: "ssh", title: "Benutzer, Gruppen & sudo",
+  id: "v2-users", mode: "ssh", vm: "uebung", topic: "linux", stage: 2, title: "Benutzer, Gruppen & sudo",
   intro: `Typische Admin-Aufgabe: Mitarbeiter anlegen, Gruppen zuordnen, Admin-Rechte vergeben.`,
   steps: [
     { title: "Benutzer anlegen", text: `<code>adduser</code> fragt interaktiv nach Passwort und Daten (Felder mit Enter überspringen). <code>useradd</code> ist die Low-Level-Variante.`,
@@ -275,7 +275,7 @@ EOF`, check: { cmd: /backup\.sh/ },
   ],
 },
 {
-  id: "v3-systemd", mode: "ssh", title: "Dienste mit systemd",
+  id: "v3-systemd", mode: "ssh", vm: "uebung", topic: "linux", stage: 2, title: "Dienste mit systemd",
   intro: `Auf modernen Distributionen startet und überwacht <b>systemd</b> alle Dienste (Daemons). Das Werkzeug dazu: <code>systemctl</code>. Logs liest du mit <code>journalctl</code>.`,
   steps: [
     { title: "Status eines Dienstes", text: `Mit <kbd>q</kbd> raus, falls die Ausgabe in einem Pager hängt.`, cmd: "systemctl status ssh --no-pager", check: { cmd: /systemctl\s+status/, out: /Active:/ } },
@@ -304,7 +304,7 @@ EOF`, check: { cmd: /zeitlog\.service/ } },
   ],
 },
 {
-  id: "v4-net", mode: "ssh", title: "Netzwerk-Grundlagen",
+  id: "v4-net", mode: "ssh", vm: "uebung", topic: "linux", stage: 2, title: "Netzwerk-Grundlagen",
   intro: `IP-Adressen, Routen, DNS, offene Ports – damit findest du 90 % aller Netzwerkprobleme.`,
   steps: [
     { title: "IP-Adressen", text: `Der moderne Befehl ist <code>ip</code> (das alte <code>ifconfig</code> gibt's nur noch mit net-tools).`, cmd: "ip -br a", check: { cmd: /^ip\s+(-\w+\s+)*(a|addr|address)\b/ } },
@@ -330,7 +330,7 @@ Anwenden mit <code>sudo netplan try</code> (setzt nach 120 s automatisch zurück
   ],
 },
 {
-  id: "v5-ssh", mode: "ssh", title: "SSH-Server absichern",
+  id: "v5-ssh", mode: "ssh", vm: "server", topic: "linux", stage: 3, title: "SSH-Server absichern",
   intro: `SSH ist der Standardzugang zu jedem Linux-Server. Best Practice: Login per <b>Schlüssel</b> statt Passwort, kein direkter root-Login.`,
   steps: [
     { title: "Schlüsselpaar erzeugen", text: `Ed25519 ist der moderne Standard. Fragen einfach mit Enter bestätigen.`, cmd: "ssh-keygen -t ed25519", check: { cmd: /ssh-keygen/ },
@@ -346,7 +346,7 @@ Anwenden mit <code>sudo netplan try</code> (setzt nach 120 s automatisch zurück
   ],
 },
 {
-  id: "v6-ufw", mode: "ssh", title: "Firewall mit ufw",
+  id: "v6-ufw", mode: "ssh", vm: "server", topic: "linux", stage: 3, title: "Firewall mit ufw",
   intro: `<b>ufw</b> (Uncomplicated Firewall) ist ein einfaches Frontend für die Kernel-Firewall (nftables/iptables). Prinzip: eingehend alles verbieten, nur Benötigtes erlauben.`,
   steps: [
     { title: "Status", cmd: "sudo ufw status verbose", check: { cmd: /ufw\s+status/ } },
@@ -359,7 +359,7 @@ Anwenden mit <code>sudo netplan try</code> (setzt nach 120 s automatisch zurück
   ],
 },
 {
-  id: "v7-web", mode: "ssh", title: "Webserver: Apache & nginx",
+  id: "v7-web", mode: "ssh", vm: "server", topic: "linux", stage: 3, title: "Webserver: Apache & nginx",
   intro: `Ein Webserver liefert Webseiten per HTTP/HTTPS aus. <b>Apache</b> und <b>nginx</b> sind die beiden großen. Wir installieren Apache, richten einen virtuellen Host ein und schauen uns nginx im Vergleich an.`,
   steps: [
     { title: "Apache installieren", cmd: "sudo apt install -y apache2", check: { cmd: /apt(-get)?\s+install\s.*apache2/ } },
@@ -464,7 +464,7 @@ EOF`, "curl -s http://localhost/"], check: { cmd: /curl/, out: /LEMP l/ } },
   outro: `🎓 <b>LAMP vs. LEMP</b> – Apache: <code>.htaccess</code>-Dateien, mod_php, sehr flexibel. nginx: sehr schnell bei vielen gleichzeitigen Verbindungen, oft als <b>Reverse Proxy</b> vor anderen Diensten. Logs: <code>/var/log/nginx/</code>, PHP: <code>journalctl -u php*-fpm</code>.`,
 },
 {
-  id: "v9-samba", mode: "ssh", title: "Dateifreigabe: Samba",
+  id: "v9-samba", mode: "ssh", vm: "server", topic: "linux", stage: 3, title: "Dateifreigabe: Samba",
   intro: `Mit <b>Samba</b> stellt ein Linux-Server Windows-Freigaben (SMB/CIFS) bereit – Standard in gemischten Netzen.`,
   steps: [
     { title: "Installieren", cmd: "sudo apt install -y samba smbclient", check: { cmd: /apt(-get)?\s+install\s.*samba/ } },
@@ -489,7 +489,7 @@ EOF`, check: { cmd: /smb\.conf|EOF/ } },
   ],
 },
 {
-  id: "v10-dns", mode: "ssh", title: "DNS-Server: BIND9",
+  id: "v10-dns", mode: "ssh", vm: "server", topic: "linux", stage: 3, title: "DNS-Server: BIND9",
   intro: `Ein eigener DNS-Server für das interne Netz (Zone <code>lab.local</code>). Prüfungsrelevant: Zonendatei, SOA, A-, CNAME-, MX-Records.`,
   steps: [
     { title: "Installieren", cmd: "sudo apt install -y bind9 bind9-utils dnsutils", check: { cmd: /apt(-get)?\s+install\s.*bind9/ } },
@@ -522,7 +522,7 @@ EOF`, check: { cmd: /db\.lab\.local|EOF/ } },
   ],
 },
 {
-  id: "v11-dhcp", mode: "ssh", title: "DHCP-Server: Kea",
+  id: "v11-dhcp", mode: "ssh", vm: "server", topic: "linux", stage: 3, title: "DHCP-Server: Kea",
   intro: `<b>Kea</b> ist der moderne DHCP-Server von ISC (Nachfolger von isc-dhcp-server). ⚠️ In diesem Lab schreiben und <b>prüfen</b> wir die Konfiguration nur, denn ein zweiter DHCP-Server im Netz kann echte Geräte durcheinanderbringen.`,
   steps: [
     { title: "Installieren", cmd: "sudo apt install -y kea-dhcp4-server", check: { cmd: /apt(-get)?\s+install\s.*kea/ } },
@@ -559,7 +559,7 @@ EOF`, check: { cmd: /kea-dhcp4\.conf|EOF/ } },
   ],
 },
 {
-  id: "v12-storage", mode: "ssh", title: "Datenträger, Mounten & LVM",
+  id: "v12-storage", mode: "ssh", vm: "server", topic: "linux", stage: 3, title: "Datenträger, Mounten & LVM",
   intro: `Festplatten partitionieren, formatieren, einhängen – und flexibel mit LVM verwalten. Wir üben gefahrlos mit <b>Image-Dateien</b> als virtuelle Festplatten (Loop-Devices).`,
   steps: [
     { title: "Blockgeräte ansehen", cmd: "lsblk", check: { cmd: /^lsblk/ } },
@@ -583,7 +583,7 @@ EOF`, check: { cmd: /kea-dhcp4\.conf|EOF/ } },
   outro: `🎓 <b>RAID-Merkhilfe:</b> RAID 0 = Striping (schnell, keine Sicherheit) · RAID 1 = Spiegelung · RAID 5 = Parität, min. 3 Platten, 1 darf ausfallen · RAID 6 = 2 dürfen ausfallen · RAID 10 = Spiegel + Striping. Unter Linux: <code>mdadm</code>. <b>RAID ersetzt kein Backup!</b>`,
 },
 {
-  id: "v13-cron", mode: "ssh", title: "Automatisieren: cron & Backups",
+  id: "v13-cron", mode: "ssh", vm: "server", topic: "linux", stage: 3, title: "Automatisieren: cron & Backups",
   intro: `Wiederkehrende Aufgaben (Backups, Updates, Aufräumen) plant man mit <b>cron</b> oder systemd-Timern.`,
   steps: [
     { title: "Backup-Skript", cmd: `sudo tee /usr/local/bin/backup-web.sh << 'EOF'
@@ -611,7 +611,7 @@ sudo chmod +x /usr/local/bin/backup-web.sh`, check: { cmd: /backup-web\.sh/ } },
   ],
 },
 {
-  id: "v14-docker", mode: "ssh", title: "Container: Docker",
+  id: "v14-docker", mode: "ssh", vm: "server", topic: "linux", stage: 3, title: "Container: Docker",
   intro: `Container verpacken eine Anwendung mit allen Abhängigkeiten. Im Gegensatz zu VMs teilen sie sich den Kernel des Hosts – leichtgewichtig und schnell.`,
   steps: [
     { title: "Docker installieren", text: `Die einfachste Variante aus den Ubuntu-Quellen (in Firmen oft das offizielle Docker-Repo):`,
@@ -639,7 +639,7 @@ mkdir -p html && echo "<h1>Compose läuft</h1>" > html/index.html && docker comp
   ],
 },
 {
-  id: "v15-trouble", mode: "ssh", title: "Troubleshooting-Checkliste",
+  id: "v15-trouble", mode: "ssh", vm: "server", topic: "linux", stage: 3, title: "Troubleshooting-Checkliste",
   intro: `Wenn „der Server nicht geht“: systematisch von unten nach oben (OSI-Modell) prüfen. Diese Befehle solltest du im Schlaf können.`,
   steps: [
     { title: "Fehler seit dem Boot", cmd: "journalctl -p err -b --no-pager | tail -20", check: { cmd: /journalctl.*-p\s*err/ } },
@@ -655,7 +655,7 @@ mkdir -p html && echo "<h1>Compose läuft</h1>" > html/index.html && docker comp
 /* TEIL 3 – SELBST HOSTEN                                                */
 /* ===================================================================== */
 {
-  id: "s1-kuma", mode: "ssh", group: "self", title: "Selbst hosten: Uptime Kuma",
+  id: "s1-kuma", mode: "ssh", vm: "server", topic: "devops", stage: 3, group: "self", title: "Selbst hosten: Uptime Kuma",
   intro: `Ab hier wird's praktisch für dein eigenes <b>Homelab</b>: Dienste, die du wirklich nutzen kannst. Fast alles läuft heute als <b>Docker-Container mit Compose</b>. Voraussetzung: Lektion „Container: Docker“. Erster Dienst: <b>Uptime Kuma</b> – überwacht Webseiten und Server und meldet Ausfälle.`,
   steps: [
     { title: "Projektordner & Compose-Datei", text: `Pro Dienst ein Ordner mit <code>compose.yaml</code> – so bleibt alles übersichtlich und sicherbar.`,
@@ -677,7 +677,7 @@ EOF`, check: { cmd: /selfhost\/kuma|compose\.yaml/ } },
   ],
 },
 {
-  id: "s2-gitea", mode: "ssh", group: "self", title: "Selbst hosten: Gitea (eigenes Git)",
+  id: "s2-gitea", mode: "ssh", vm: "server", topic: "devops", stage: 3, group: "self", title: "Selbst hosten: Gitea (eigenes Git)",
   intro: `<b>Gitea</b> ist ein schlankes „eigenes GitHub“: Repositories, Issues, Wiki – auf deinem Server. Perfekt für Skripte und Konfigurationen deines Homelabs.`,
   steps: [
     { title: "Compose-Datei", cmd: `mkdir -p ~/selfhost/gitea && cd ~/selfhost/gitea && cat > compose.yaml << 'EOF'
@@ -704,7 +704,7 @@ EOF`, check: { cmd: /selfhost\/gitea|compose\.yaml/ } },
   ],
 },
 {
-  id: "s3-proxy", mode: "ssh", group: "self", title: "Reverse Proxy mit Caddy",
+  id: "s3-proxy", mode: "ssh", vm: "server", topic: "devops", stage: 3, group: "self", title: "Reverse Proxy mit Caddy",
   intro: `Statt dir Ports zu merken (<code>:3000</code>, <code>:3001</code> …) gibt es einen <b>Reverse Proxy</b>: Er nimmt alle Anfragen an und leitet sie anhand des <b>Hostnamens</b> an den richtigen Dienst weiter. <b>Caddy</b> ist dafür besonders einfach (und holt sich bei öffentlichen Domains automatisch HTTPS-Zertifikate).`,
   steps: [
     { title: "Namen ohne eigenen DNS: nip.io", text: `<code>nip.io</code> ist ein öffentlicher DNS-Dienst, der jeden Namen mit einer IP darin auf genau diese IP auflöst: <code>kuma.{{IP}}.nip.io</code> → <code>{{IP}}</code>. Teste es:`,
@@ -738,7 +738,7 @@ cat Caddyfile`, check: { cmd: /Caddyfile|caddy/, out: /reverse_proxy/ } },
   ],
 },
 {
-  id: "s4-care", mode: "ssh", group: "self", title: "Dienste pflegen: Updates, Backups, Sicherheit",
+  id: "s4-care", mode: "ssh", vm: "server", topic: "devops", stage: 3, group: "self", title: "Dienste pflegen: Updates, Backups, Sicherheit",
   intro: `Selbst hosten heißt auch: <b>du</b> bist der Admin. Drei Dinge entscheiden, ob dein Homelab Freude oder Ärger macht.`,
   steps: [
     { title: "Updates einspielen", text: `Neues Image holen und Container neu erstellen – die Daten bleiben im Volume.`,

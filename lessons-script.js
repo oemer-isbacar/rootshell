@@ -7,7 +7,7 @@ window.LESSONS.push(
 /* LINUX · TEIL 4 – BASH-SKRIPTE                                          */
 /* ===================================================================== */
 {
-  id: "x1-first", mode: "ssh", group: "script", title: "Dein erstes richtiges Skript",
+  id: "x1-first", mode: "ssh", vm: "uebung", topic: "script", stage: 2, group: "script", title: "Dein erstes richtiges Skript",
   intro: `Ab jetzt schreibst du eigene Werkzeuge. Ein Bash-Skript ist eine Textdatei mit Befehlen, die nacheinander ausgeführt werden – genau die Befehle, die du schon kennst. Deine Skripte kommen nach <code>~/bin</code>. Mehrzeilige Blöcke kopierst du mit „übernehmen“ und drückst Enter.`,
   steps: [
     { title: "Ordner für deine Skripte", cmd: "mkdir -p ~/bin && cd ~/bin && pwd", check: { cmd: /mkdir.*bin/, out: /\/bin/ } },
@@ -30,7 +30,7 @@ EOF`, check: { cmd: /cat\s*>\s*~\/bin\/hallo\.sh/ },
   ],
 },
 {
-  id: "x2-vars", mode: "ssh", group: "script", title: "Variablen, Parameter & Rechnen",
+  id: "x2-vars", mode: "ssh", vm: "uebung", topic: "script", stage: 2, prep: "mkdir -p /home/ubuntu/bin && chown ubuntu:ubuntu /home/ubuntu/bin", group: "script", title: "Variablen, Parameter & Rechnen",
   intro: `Skripte werden erst nützlich, wenn sie mit verschiedenen Werten arbeiten: Variablen, Parameter beim Aufruf und Eingaben.`,
   steps: [
     { title: "Variablen und Anführungszeichen", cmd: ['ORT="Calw Stadt"', 'echo "Ich bin in $ORT"', "echo 'Ich bin in $ORT'"], check: { cmd: /^echo\s+'[^']*\$ORT/, out: /in \$ORT/ },
@@ -58,7 +58,7 @@ chmod +x ~/bin/gruss.sh`, check: { cmd: /cat\s*>\s*~\/bin\/gruss\.sh/ } },
   ],
 },
 {
-  id: "x3-if", mode: "ssh", group: "script", title: "Bedingungen & Exit-Codes",
+  id: "x3-if", mode: "ssh", vm: "uebung", topic: "script", stage: 2, prep: "mkdir -p /home/ubuntu/bin && chown ubuntu:ubuntu /home/ubuntu/bin", group: "script", title: "Bedingungen & Exit-Codes",
   intro: `Jeder Befehl meldet beim Beenden einen <b>Exit-Code</b>: 0 heißt Erfolg, alles andere Fehler. Darauf bauen <code>if</code>, <code>&amp;&amp;</code> und <code>||</code> auf – und Monitoring-Systeme, die deine Skripte überwachen.`,
   steps: [
     { title: "Exit-Codes ansehen", cmd: ["grep -q ubuntu /etc/passwd; echo $?", "grep -q gibtsnicht /etc/passwd; echo $?"], check: { cmd: /gibtsnicht.*echo\s+\$\?/, out: /^1\s*$/m },
@@ -86,12 +86,12 @@ chmod +x ~/bin/dienst.sh`, check: { cmd: /cat\s*>\s*~\/bin\/dienst\.sh/ },
       check: { cmd: /dienst\.sh\s*;\s*echo/, out: /Exit: 2/, err: true },
       explain: `Genau so arbeiten Monitoring-Werkzeuge wie Nagios oder Icinga: Sie starten ein Prüfskript und werten nur den Exit-Code aus.` },
     { title: "Mehrere Fälle: case", cmd: `TAG=$(date +%u); case $TAG in 6|7) echo "Wochenende – kein Backup" ;; 1) echo "Montag – Vollbackup" ;; *) echo "Tag $TAG – inkrementelles Backup" ;; esac`,
-      check: { cmd: /case\s/, out: /Backup/ },
+      check: { cmd: /case\s/, out: /backup/i },
       explain: `<code>case</code> ist übersichtlicher als viele <code>elif</code>. Typisch in Skripten mit Unterbefehlen: <code>case "$1" in start) … ;; stop) … ;; *) echo "Aufruf: $0 start|stop" ;; esac</code>.` },
   ],
 },
 {
-  id: "x4-loops", mode: "ssh", group: "script", title: "Schleifen & Dateien verarbeiten",
+  id: "x4-loops", mode: "ssh", vm: "uebung", topic: "script", stage: 2, group: "script", title: "Schleifen & Dateien verarbeiten",
   intro: `Hier spart ein Skript am meisten Arbeit: dieselbe Aufgabe für 3, 300 oder 3000 Dateien, Server oder Benutzer.`,
   steps: [
     { title: "for über eine Liste", cmd: `for srv in web01 db01 mail01; do echo "Sichere $srv …"; done`, check: { cmd: /^for\s+\w+\s+in\s/, out: /mail01/ } },
@@ -115,7 +115,7 @@ EOF`, check: { cmd: /mitarbeiter\.csv/ } },
   ],
 },
 {
-  id: "x5-func", mode: "ssh", group: "script", title: "Funktionen, Fehler & Logging",
+  id: "x5-func", mode: "ssh", vm: "uebung", topic: "script", stage: 2, prep: "mkdir -p /home/ubuntu/bin && chown ubuntu:ubuntu /home/ubuntu/bin", group: "script", title: "Funktionen, Fehler & Logging",
   intro: `Skripte, die nachts unbeaufsichtigt laufen, müssen Fehler bemerken, sauber aufräumen und protokollieren, was passiert ist.`,
   steps: [
     { title: "Eine Funktion zum Protokollieren", cmd: [`log() { echo "$(date '+%F %T') [$1] \${*:2}"; }`, `log INFO "Backup gestartet"`], check: { cmd: /^log\s+INFO/, out: /\[INFO\] Backup gestartet/ },
@@ -153,7 +153,7 @@ chmod +x ~/bin/aufraeumen.sh`, "~/bin/aufraeumen.sh"],
   ],
 },
 {
-  id: "x6-report", mode: "ssh", group: "script", title: "Projekt: Systembericht mit Optionen & cron",
+  id: "x6-report", mode: "ssh", vm: "server", topic: "script", stage: 3, group: "script", title: "Projekt: Systembericht mit Optionen & cron",
   intro: `Zum Abschluss ein Skript wie aus dem Admin-Alltag: Es sammelt den Zustand des Servers, versteht Optionen wie <code>-o datei</code> und <code>-h</code> und läuft jeden Morgen automatisch.`,
   steps: [
     { title: "Das Skript", cmd: `cat > ~/bin/sysbericht.sh << 'EOF'
