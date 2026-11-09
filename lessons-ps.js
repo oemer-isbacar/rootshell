@@ -7,7 +7,7 @@ window.LESSONS.push(
 /* TEIL 1 – POWERSHELL-GRUNDLAGEN                                         */
 /* ===================================================================== */
 {
-  id: "p1-start", mode: "ps", vm: "uebung", topic: "ps", stage: 2, prep: "command -v pwsh >/dev/null || { echo \"Installiere PowerShell 7 …\"; snap install powershell --classic >/dev/null; }", group: "ps", title: "Erste Schritte in PowerShell",
+  id: "p1-start", mode: "ps", vm: "uebung", topic: "ps", stage: 2, prep: "command -v pwsh >/dev/null || { echo \"Installiere PowerShell 7 …\"; snap install powershell --classic >/dev/null; }; mkdir -p /home/ubuntu/ps-lab /home/ubuntu/skripte && chown ubuntu:ubuntu /home/ubuntu/ps-lab /home/ubuntu/skripte", group: "ps", title: "Erste Schritte in PowerShell",
   intro: `Links läuft <b>PowerShell 7</b> – dieselbe PowerShell, die auf Windows 10/11 und Windows Server läuft, hier in deiner Übungs-VM. So kannst du nichts an deinem PC kaputt machen. Der Prompt <code>PS /home/ubuntu&gt;</code> zeigt, wo du bist (unter Windows stünde dort z. B. <code>PS C:\\Users\\du&gt;</code>).`,
   steps: [
     { title: "Welche Version?", text: `<code>$PSVersionTable</code> ist eine eingebaute Variable mit Infos zur PowerShell.`,
@@ -32,7 +32,7 @@ window.LESSONS.push(
   ],
 },
 {
-  id: "p2-files", mode: "ps", vm: "uebung", topic: "ps", stage: 2, prep: "command -v pwsh >/dev/null || { echo \"Installiere PowerShell 7 …\"; snap install powershell --classic >/dev/null; }", group: "ps", title: "Dateien & Ordner",
+  id: "p2-files", mode: "ps", vm: "uebung", topic: "ps", stage: 2, prep: "command -v pwsh >/dev/null || { echo \"Installiere PowerShell 7 …\"; snap install powershell --classic >/dev/null; }; mkdir -p /home/ubuntu/ps-lab /home/ubuntu/skripte && chown ubuntu:ubuntu /home/ubuntu/ps-lab /home/ubuntu/skripte", group: "ps", title: "Dateien & Ordner",
   intro: `Dateien und Ordner heißen in PowerShell <b>Items</b>. Die Befehle sind auf Windows und Linux gleich – nur die Pfade sehen anders aus (<code>C:\\Daten</code> statt <code>/home/ubuntu</code>).`,
   steps: [
     { title: "Wo bin ich?", cmd: "Get-Location", check: { cmd: /get-location|^pwd$/i, out: /\// } },
@@ -53,7 +53,7 @@ window.LESSONS.push(
   ],
 },
 {
-  id: "p3-pipeline", mode: "ps", vm: "uebung", topic: "ps", stage: 2, prep: "command -v pwsh >/dev/null || { echo \"Installiere PowerShell 7 …\"; snap install powershell --classic >/dev/null; }", group: "ps", title: "Die Pipeline: filtern, sortieren, auswählen",
+  id: "p3-pipeline", mode: "ps", vm: "uebung", topic: "ps", stage: 2, prep: "command -v pwsh >/dev/null || { echo \"Installiere PowerShell 7 …\"; snap install powershell --classic >/dev/null; }; mkdir -p /home/ubuntu/ps-lab /home/ubuntu/skripte && chown ubuntu:ubuntu /home/ubuntu/ps-lab /home/ubuntu/skripte", group: "ps", title: "Die Pipeline: filtern, sortieren, auswählen",
   intro: `Mit <code>|</code> gibst du Objekte an den nächsten Befehl weiter. Die vier Werkzeuge, die du dauernd brauchst: <code>Where-Object</code> (filtern), <code>Sort-Object</code> (sortieren), <code>Select-Object</code> (Spalten/Anzahl wählen) und <code>Measure-Object</code> (zählen/summieren).`,
   steps: [
     { title: "Prozesse ansehen", cmd: "Get-Process | Select-Object -First 5", check: { cmd: /get-process/i, out: /ProcessName|Name/ } },
@@ -76,7 +76,7 @@ window.LESSONS.push(
   ],
 },
 {
-  id: "p4-vars", mode: "ps", vm: "uebung", topic: "ps", stage: 2, prep: "command -v pwsh >/dev/null || { echo \"Installiere PowerShell 7 …\"; snap install powershell --classic >/dev/null; }", group: "ps", title: "Variablen, Arrays & Hashtables",
+  id: "p4-vars", mode: "ps", vm: "uebung", topic: "ps", stage: 2, prep: "command -v pwsh >/dev/null || { echo \"Installiere PowerShell 7 …\"; snap install powershell --classic >/dev/null; }; mkdir -p /home/ubuntu/ps-lab /home/ubuntu/skripte && chown ubuntu:ubuntu /home/ubuntu/ps-lab /home/ubuntu/skripte", group: "ps", title: "Variablen, Arrays & Hashtables",
   intro: `Variablen beginnen mit <code>$</code>. Sie können alles speichern: Text, Zahlen, Listen und ganze Objekte.`,
   steps: [
     { title: "Variable und Text", text: `In doppelten Anführungszeichen werden Variablen eingesetzt, in einfachen nicht.`,
@@ -96,7 +96,7 @@ window.LESSONS.push(
   ],
 },
 {
-  id: "p5-export", mode: "ps", vm: "uebung", topic: "ps", stage: 2, prep: "command -v pwsh >/dev/null || { echo \"Installiere PowerShell 7 …\"; snap install powershell --classic >/dev/null; }", group: "ps", title: "Ausgabe & Export: Tabelle, CSV, JSON",
+  id: "p5-export", mode: "ps", vm: "uebung", topic: "ps", stage: 2, prep: "command -v pwsh >/dev/null || { echo \"Installiere PowerShell 7 …\"; snap install powershell --classic >/dev/null; }; mkdir -p /home/ubuntu/ps-lab /home/ubuntu/skripte && chown ubuntu:ubuntu /home/ubuntu/ps-lab /home/ubuntu/skripte", group: "ps", title: "Ausgabe & Export: Tabelle, CSV, JSON",
   intro: `Admins brauchen ständig Listen für Kollegen, Excel oder andere Programme. PowerShell exportiert Objekte direkt – ohne Textgebastel.`,
   steps: [
     { title: "Als Tabelle", cmd: "Get-Process | Select-Object -First 5 | Format-Table Name, Id, CPU -AutoSize", check: { cmd: /format-table|\bft\b/i } },
@@ -114,7 +114,7 @@ window.LESSONS.push(
   ],
 },
 {
-  id: "p6-script", mode: "ps", vm: "uebung", topic: "ps", stage: 2, prep: "command -v pwsh >/dev/null || { echo \"Installiere PowerShell 7 …\"; snap install powershell --classic >/dev/null; }", group: "ps", title: "Skripte, Bedingungen & Schleifen",
+  id: "p6-script", mode: "ps", vm: "uebung", topic: "ps", stage: 2, prep: "command -v pwsh >/dev/null || { echo \"Installiere PowerShell 7 …\"; snap install powershell --classic >/dev/null; }; mkdir -p /home/ubuntu/ps-lab /home/ubuntu/skripte && chown ubuntu:ubuntu /home/ubuntu/ps-lab /home/ubuntu/skripte", group: "ps", title: "Skripte, Bedingungen & Schleifen",
   intro: `Ein PowerShell-Skript ist eine Textdatei mit der Endung <code>.ps1</code>. Damit automatisierst du wiederkehrende Aufgaben.`,
   steps: [
     { title: "if / else", cmd: `if ((Get-Date).Hour -lt 12) { "Guten Morgen" } else { "Guten Tag" }`, check: { cmd: /^if\s*\(/i, out: /Guten/ } },
@@ -134,7 +134,7 @@ window.LESSONS.push(
   ],
 },
 {
-  id: "p7-errors", mode: "ps", vm: "uebung", topic: "ps", stage: 2, prep: "command -v pwsh >/dev/null || { echo \"Installiere PowerShell 7 …\"; snap install powershell --classic >/dev/null; }", group: "ps", title: "Fehlerbehandlung",
+  id: "p7-errors", mode: "ps", vm: "uebung", topic: "ps", stage: 2, prep: "command -v pwsh >/dev/null || { echo \"Installiere PowerShell 7 …\"; snap install powershell --classic >/dev/null; }; mkdir -p /home/ubuntu/ps-lab /home/ubuntu/skripte && chown ubuntu:ubuntu /home/ubuntu/ps-lab /home/ubuntu/skripte", group: "ps", title: "Fehlerbehandlung",
   intro: `Skripte laufen oft unbeaufsichtigt (z. B. nachts als geplanter Task). Dann müssen sie mit Fehlern umgehen können, statt einfach abzubrechen.`,
   steps: [
     { title: "Ein Fehler", text: `Absichtlich: eine Datei, die es nicht gibt.`, cmd: "Get-Item /gibt/es/nicht", check: { cmd: /get-item/i, out: /Cannot find path/ },
@@ -150,7 +150,7 @@ window.LESSONS.push(
   ],
 },
 {
-  id: "p8-text", mode: "ps", vm: "uebung", topic: "ps", stage: 2, prep: "command -v pwsh >/dev/null || { echo \"Installiere PowerShell 7 …\"; snap install powershell --classic >/dev/null; }", group: "ps", title: "Text durchsuchen & Logs auswerten",
+  id: "p8-text", mode: "ps", vm: "uebung", topic: "ps", stage: 2, prep: "command -v pwsh >/dev/null || { echo \"Installiere PowerShell 7 …\"; snap install powershell --classic >/dev/null; }; mkdir -p /home/ubuntu/ps-lab /home/ubuntu/skripte && chown ubuntu:ubuntu /home/ubuntu/ps-lab /home/ubuntu/skripte", group: "ps", title: "Text durchsuchen & Logs auswerten",
   intro: `<code>Select-String</code> ist das PowerShell-Gegenstück zu <code>grep</code> – und liefert ebenfalls Objekte (Datei, Zeilennummer, Treffer).`,
   steps: [
     { title: "In einer Datei suchen", cmd: `Select-String -Path /etc/passwd -Pattern "bash"`, check: { cmd: /select-string/i, out: /passwd:\d+:/ } },
@@ -166,7 +166,7 @@ window.LESSONS.push(
   ],
 },
 {
-  id: "p9-net", mode: "ps", vm: "uebung", topic: "ps", stage: 2, prep: "command -v pwsh >/dev/null || { echo \"Installiere PowerShell 7 …\"; snap install powershell --classic >/dev/null; }", group: "ps", title: "Netzwerk & Web-APIs",
+  id: "p9-net", mode: "ps", vm: "uebung", topic: "ps", stage: 2, prep: "command -v pwsh >/dev/null || { echo \"Installiere PowerShell 7 …\"; snap install powershell --classic >/dev/null; }; mkdir -p /home/ubuntu/ps-lab /home/ubuntu/skripte && chown ubuntu:ubuntu /home/ubuntu/ps-lab /home/ubuntu/skripte", group: "ps", title: "Netzwerk & Web-APIs",
   intro: `PowerShell kann direkt mit dem Netzwerk und mit REST-APIs sprechen – ohne Zusatzprogramme.`,
   steps: [
     { title: "Erreichbar? (Ping)", cmd: "Test-Connection 1.1.1.1 -Count 2", check: { cmd: /test-connection/i, out: /1\.1\.1\.1/ } },
@@ -185,7 +185,7 @@ window.LESSONS.push(
 /* TEIL 2 – WINDOWS-VERWALTUNG                                            */
 /* ===================================================================== */
 {
-  id: "p10-windows", mode: "ps", vm: "uebung", topic: "ps", stage: 2, prep: "command -v pwsh >/dev/null || { echo \"Installiere PowerShell 7 …\"; snap install powershell --classic >/dev/null; }", group: "ps-admin", title: "Windows verwalten – auf deinem PC (nur lesen)",
+  id: "p10-windows", mode: "ps", vm: "uebung", topic: "ps", stage: 2, prep: "command -v pwsh >/dev/null || { echo \"Installiere PowerShell 7 …\"; snap install powershell --classic >/dev/null; }; mkdir -p /home/ubuntu/ps-lab /home/ubuntu/skripte && chown ubuntu:ubuntu /home/ubuntu/ps-lab /home/ubuntu/skripte", group: "ps-admin", title: "Windows verwalten – auf deinem PC (nur lesen)",
   intro: `Einige Cmdlets gibt es nur unter Windows: Dienste, lokale Benutzer, Netzwerkadapter, Ereignisanzeige, Registry. Die folgenden Befehle <b>lesen nur</b> und ändern nichts – du kannst sie gefahrlos auf deinem PC ausprobieren: <b>Startmenü → „PowerShell“</b> öffnen, Befehl mit 📋 kopieren und mit Rechtsklick einfügen.`,
   steps: [
     { title: "Dienste", text: `Welche Dienste laufen gerade?`, win: "Get-Service | Where-Object Status -eq Running | Sort-Object DisplayName | Select-Object -First 15 Name, DisplayName",
@@ -209,7 +209,7 @@ window.LESSONS.push(
   ],
 },
 {
-  id: "p11-auto", mode: "ps", vm: "uebung", topic: "ps", stage: 2, prep: "command -v pwsh >/dev/null || { echo \"Installiere PowerShell 7 …\"; snap install powershell --classic >/dev/null; }", group: "ps-admin", title: "Praxis: Automatisieren wie ein Admin",
+  id: "p11-auto", mode: "ps", vm: "uebung", topic: "ps", stage: 2, prep: "command -v pwsh >/dev/null || { echo \"Installiere PowerShell 7 …\"; snap install powershell --classic >/dev/null; }; mkdir -p /home/ubuntu/ps-lab /home/ubuntu/skripte && chown ubuntu:ubuntu /home/ubuntu/ps-lab /home/ubuntu/skripte", group: "ps-admin", title: "Praxis: Automatisieren wie ein Admin",
   intro: `Zum Abschluss ein typisches Admin-Skript: Es prüft Speicherplatz und Dienste, schreibt ein Protokoll und gibt eine Warnung aus – so etwas läuft in Firmen täglich als geplanter Task.`,
   steps: [
     { title: "Prüfskript schreiben", text: `Diesmal als mehrzeiliges Skript (klick „übernehmen“, dann Enter):`,
