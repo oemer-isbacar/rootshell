@@ -644,6 +644,9 @@ function vmCard(id) {
   const e = vmEnv(id), v = e?.vm, info = VM_INFO[id], t = `data-target="${id}"`;
   let h = `<section class="vmcard${activeVm === id ? " active" : ""}"><h4>${VM_LABEL[id]} <code>${escapeHtml(e?.name || "")}</code></h4>
     <p class="muted small">${info.role}</p>`;
+  const needGB = id === "server" ? 2 : 1;
+  if (env.ramFreeGB != null && env.ramFreeGB < needGB + 0.3 && (!v || v.state !== "Running"))
+    h += `<p class="box warn small">⚠️ Gerade sind nur ${String(env.ramFreeGB).replace(".", ",")} GB Arbeitsspeicher frei – die ${VM_PLAIN[id]} braucht ${needGB} GB. Schließe vorher Programme (z. B. Browser-Tabs), sonst kann Windows sie nicht starten.</p>`;
   if (!v) {
     h += `<p>Noch nicht angelegt. Erstellt wird Ubuntu 24.04 LTS mit ${info.size} (wächst nur bei Bedarf).</p>
       <button class="primary" data-vm="launch" ${t}>🚀 ${VM_PLAIN[id]} erstellen</button></section>`;
@@ -689,7 +692,7 @@ function renderVmCenter() {
     h += `<li>${ok(hv.running)} Hyper-V ${hv.running ? "aktiv" : hv.enabled ? "installiert, aber nicht aktiv – Windows neu starten" : "nicht aktiviert"}
       ${!hv.enabled && hv.supported ? `<button data-vm="hyperv">Hyper-V aktivieren</button>` : ""}
       ${!hv.running && hv.firmware === false && !hv.enabled ? `<small>Falls das nicht klappt: Virtualisierung (Intel VT-x / AMD-V / SVM) im BIOS/UEFI einschalten.</small>` : ""}</li>`;
-    h += `<li>${ok(env.ramGB >= 8)} Arbeitsspeicher: ${env.ramGB || "?"} GB <small>(Server-VM 2 GB, Übungs-VM 1 GB – nie beide gleichzeitig)</small></li>`;
+    h += `<li>${ok(env.ramGB >= 8)} Arbeitsspeicher: ${env.ramGB || "?"} GB${env.ramFreeGB != null ? `, davon gerade frei: <b>${String(env.ramFreeGB).replace(".", ",")} GB</b>` : ""} <small>(Server-VM 2 GB, Übungs-VM 1 GB – nie beide gleichzeitig)</small></li>`;
   }
   h += `<li>${ok(mp.installed)} Multipass ${mp.installed ? escapeHtml(mp.version || "") : "nicht installiert"}
     ${!mp.installed ? (env.winget ? `<button data-vm="install">Multipass installieren</button>` : `<small>Download: multipass.run</small>`) : ""}</li></ul></section>`;
@@ -1082,8 +1085,9 @@ function markEvent(name) {
 }
 
 // Fehlermeldungen von Programmen und Shell (BusyBox, GNU, deutsch) – nur am Zeilenanfang "prog: …",
+// reine Hinweise ("info: …", z. B. von adduser beim Installieren von nginx/MariaDB) zählen nicht,
 // damit Log-Zeilen (journalctl, grep in Logs) nicht fälschlich als Fehler zählen.
-const ERR_LINE_RE = /^(?:[^\s:]+:.*(?:No such file or directory|command not found|: not found|Permission denied|Keine Berechtigung|nicht gefunden|invalid option|unrecognized option|unknown option|ungültige Option|missing (?:file )?operand|fehlender Operand|Is a directory|Not a directory|cannot access|can't (?:open|create|remove|cd|access|stat)|syntax error|Syntaxfehler|applet not found|Usage: |usage: |is not recognized|Cannot find|does not exist|cannot be found|A parameter cannot be found|Cannot bind|Cannot convert|is denied|Could not find)|E: |ERROR|Failed to |Unit \S+ (?:could not be found|not found)|ParserError|InvalidOperation:|\s+\+ (?:CategoryInfo|FullyQualifiedErrorId)\s+:|\s+\| .*(?:is not recognized|Cannot find|does not exist|Unexpected token|Missing ))/;
+const ERR_LINE_RE = /^(?!info: )(?:[^\s:]+:.*(?:No such file or directory|command not found|: not found|Permission denied|Keine Berechtigung|nicht gefunden|invalid option|unrecognized option|unknown option|ungültige Option|missing (?:file )?operand|fehlender Operand|Is a directory|Not a directory|cannot access|can't (?:open|create|remove|cd|access|stat)|syntax error|Syntaxfehler|applet not found|Usage: |usage: |is not recognized|Cannot find|does not exist|cannot be found|A parameter cannot be found|Cannot bind|Cannot convert|is denied|Could not find)|E: |ERROR|Failed to |Unit \S+ (?:could not be found|not found)|ParserError|InvalidOperation:|\s+\+ (?:CategoryInfo|FullyQualifiedErrorId)\s+:|\s+\| .*(?:is not recognized|Cannot find|does not exist|Unexpected token|Missing ))/;
 function errorLines(out) { return out.split("\n").filter((l) => ERR_LINE_RE.test(l.replace(/\r/g, ""))).join("\n"); }
 
 function runCheck(check, cmd, out) {

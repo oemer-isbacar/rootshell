@@ -407,7 +407,7 @@ EOF`, check: { cmd: /intranet\.conf|EOF/ } },
   ],
 },
 {
-  id: "v8b-lemp", mode: "ssh", title: "LEMP-Stack: nginx + MariaDB + PHP",
+  id: "v8b-lemp", mode: "ssh", topic: "db", stage: 3, title: "LEMP-Stack: nginx + MariaDB + PHP",
   intro: `<b>LEMP</b> = <b>L</b>inux + <b>E</b>ngine-X (nginx) + <b>M</b>ariaDB/MySQL + <b>P</b>HP. Der Klassiker für Webanwendungen (WordPress, Nextcloud, …). Die Variante mit Apache heißt <b>LAMP</b>. Unterschied: Apache bindet PHP direkt als Modul ein, nginx reicht PHP-Anfragen per <b>FastCGI</b> an einen eigenen Dienst weiter: <b>PHP-FPM</b>.`,
   steps: [
     { title: "Pakete installieren", text: `Apache belegt Port 80 – den schalten wir ab (falls installiert).`,
