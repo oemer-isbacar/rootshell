@@ -202,6 +202,8 @@ Hinweis und Lösung gibt es nur auf Knopfdruck.
 
 ## Mitmachen
 
+Bekannte Fehler und geplante Erweiterungen stehen in [docs/OFFENE-PUNKTE.md](docs/OFFENE-PUNKTE.md).
+
 Fehler gefunden oder Idee für eine Lektion, Mission oder Prüfungsfrage? Gern als Issue oder Pull Request – wie die Inhalte aufgebaut sind, steht in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Lizenz
