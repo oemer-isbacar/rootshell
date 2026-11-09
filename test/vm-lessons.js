@@ -53,7 +53,8 @@ async function job(j) {
 // Befehl als ubuntu ausführen; Arbeitsverzeichnis bleibt zwischen den Befehlen erhalten (wie in einer echten Sitzung)
 let PROF = vmctl.profile("server");
 async function sh(cmd, ip) {
-  const script = `cd "$(cat /tmp/.rs_cwd 2>/dev/null || echo ~)" 2>/dev/null || cd ~\n${cmd.replace(/\{\{IP\}\}/g, ip)}\npwd > /tmp/.rs_cwd`;
+  // ohne Terminal meldet debconf „unable to re-open stdin“ – das wäre ein Fehlalarm, in der App gibt es ein echtes Terminal
+  const script = `export DEBIAN_FRONTEND=noninteractive\ncd "$(cat /tmp/.rs_cwd 2>/dev/null || echo ~)" 2>/dev/null || cd ~\n${cmd.replace(/\{\{IP\}\}/g, ip)}\npwd > /tmp/.rs_cwd`;
   const b64 = Buffer.from(script).toString("base64");
   const r = await vmctl.mp(["exec", PROF.name, "--", "sudo", "-u", "ubuntu", "-H", "bash", "-c", `echo ${b64} | base64 -d | bash 2>&1`], { timeout: 600000 });
   return (r.stdout + r.stderr).replace(/\r/g, "");

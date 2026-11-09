@@ -3,6 +3,7 @@
 "use strict";
 const { spawn, execFile } = require("child_process");
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 const { utils: sshUtils } = require("ssh2");
 
@@ -118,7 +119,8 @@ async function envNow() {
     }));
   }
   // vm / snapshots / vmName: Spiegel der Server-VM für ältere Stellen in der App
-  return { platform: process.platform, ...host, multipass: mpi, vms,
+  // freier RAM ändert sich ständig → bei jeder Abfrage frisch (ohne PowerShell, sofort)
+  return { platform: process.platform, ...host, ramFreeGB: Math.round(os.freemem() / 1073741824 * 10) / 10, multipass: mpi, vms,
     vmName: VM, vm: vms.server.vm, snapshots: vms.server.snapshots };
 }
 async function stateOf(p) {
@@ -166,7 +168,14 @@ function spawnStep(cmd, args, label, { input } = {}) {
     p.stdout.on("data", on); p.stderr.on("data", on);
     if (input != null) p.stdin.end(input);
     p.on("error", (e) => { job.log += `\n${e.message}\n`; resolve(false); });
-    p.on("close", (code) => { job.progress = null; resolve(code === 0 ? true : (job.log += `\n(Exit-Code ${code})\n`, false)); });
+    p.on("close", (code) => {
+      job.progress = null;
+      if (code === 0) return resolve(true);
+      job.log += `\n(Exit-Code ${code})\n`;
+      if (/OutOfMemory|nicht gen.gend Arbeitsspeicher|not enough memory|insufficient memory/i.test(job.log))
+        job.log += `\n💡 Windows hat gerade nicht genug freien Arbeitsspeicher für die VM. Schließe Programme, die viel RAM brauchen (z. B. Browser-Tabs), oder pausiere die andere VM – und versuche es dann noch einmal.\n`;
+      resolve(false);
+    });
   });
 }
 const mpStep = (args, label, opts) => spawnStep(mpPath(), args, label, opts);
