@@ -389,7 +389,7 @@ EOF`, check: { cmd: /intranet\.conf|EOF/ } },
   outro: `🔒 <b>HTTPS:</b> In der Praxis holst du dir mit <code>certbot</code> (Let's Encrypt) ein Zertifikat – das braucht eine öffentliche Domain. Für ein Lab reicht ein selbstsigniertes: <code>sudo a2enmod ssl && sudo a2ensite default-ssl && sudo systemctl reload apache2</code>, dann <code>curl -kI https://localhost</code>.`,
 },
 {
-  id: "v8-db", mode: "ssh", title: "Datenbank: MariaDB",
+  id: "v8-db", mode: "ssh", topic: "db", stage: 3, title: "Datenbank: MariaDB",
   intro: `MariaDB ist der freie MySQL-Nachfolger. Typisch: Server installieren, absichern, Datenbank + Benutzer für eine Anwendung anlegen.`,
   steps: [
     { title: "Installieren", cmd: "sudo apt install -y mariadb-server", check: { cmd: /apt(-get)?\s+install\s.*mariadb-server/ } },

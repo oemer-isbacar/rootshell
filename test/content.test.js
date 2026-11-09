@@ -65,6 +65,37 @@ test("Lektionen: vorgeschlagene Befehle bestehen ihre eigene Prüfung (Befehlste
   assert.deepStrictEqual(bad, [], "Diese Schritte lassen sich mit dem gezeigten Befehl nicht abschließen");
 });
 
+test("Lernpfad: Themen, Stufen und VMs", () => {
+  const topics = new Set((W.TOPICS || []).map((t) => t.id));
+  assert.ok(topics.size > 0, "topics.js definiert keine Themen");
+  uniq((W.TOPICS || []).map((t) => t.id), "Thema");
+  for (const l of LESSONS) {
+    if (l.vm !== undefined) {
+      assert.ok(["uebung", "server"].includes(l.vm), `${l.id}: vm muss "uebung" oder "server" sein`);
+      assert.ok(["ssh", "ps"].includes(l.mode), `${l.id}: vm gibt es nur bei mode ssh/ps`);
+    }
+    if (l.prep !== undefined) {
+      assert.strictEqual(l.vm, "uebung", `${l.id}: prep nur bei Übungen (vm: "uebung")`);
+      assert.strictEqual(typeof l.prep, "string", `${l.id}: prep muss ein Skript (Text) sein`);
+    }
+    if (l.topic !== undefined || l.stage !== undefined) {
+      assert.ok(topics.has(l.topic), `${l.id}: Thema ${l.topic} fehlt in topics.js`);
+      assert.ok([1, 2, 3].includes(l.stage), `${l.id}: stage muss 1–3 sein`);
+      if (l.stage === 1) assert.strictEqual(l.mode || "browser", "browser", `${l.id}: Stufe 1 (Lernen) läuft im Browser`);
+      if (l.stage === 2 && ["ssh", "ps"].includes(l.mode)) assert.strictEqual(l.vm, "uebung", `${l.id}: Stufe 2 (Üben) läuft in der Übungs-VM`);
+      if (l.stage === 3) assert.ok((l.vm || "server") === "server", `${l.id}: Stufe 3 (Anwenden) läuft auf der Server-VM`);
+    }
+  }
+  for (const m of MISSIONS) if (m.topic !== undefined) assert.ok(topics.has(m.topic), `${m.id}: Thema ${m.topic} fehlt in topics.js`);
+});
+
+test("Server findet prep-Skripte nur über die Lektions-ID", () => {
+  const server = read("server.js");
+  assert.ok(/body\.lesson/.test(server) && !/body\.(prep|script)/.test(server), "server.js darf kein Skript aus dem Browser annehmen");
+  const vmctl = read("vmctl.js");
+  assert.ok(/const PROFILES = \{/.test(vmctl) && /function profile\(vm\)/.test(vmctl), "vmctl.js: VM-Profile fehlen");
+});
+
 test("Trainingskarten", () => {
   uniq(DRILLS.map((d) => d.id), "Karte");
   const ids = new Set(LESSONS.map((l) => l.id));

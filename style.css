@@ -288,3 +288,21 @@ button.small { font-size: 12px; padding: 2px 6px; }
 .review.bad { border-left-color: #7f1d1d; background: #1a1012; }
 .review code, .box code { font-family: ui-monospace, Consolas, monospace; font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; color: #fde68a; }
 .progress > div { height: 100%; background: var(--accent); border-radius: 3px; transition: width .3s; }
+
+/* ---------- Lernpfad ①–④ ---------- */
+.pathbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 12px; padding: 8px 10px;
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; }
+.pathtopic { font-weight: 600; margin-right: 6px; }
+.pathbar .station { padding: 4px 10px; border-radius: 999px; font-size: 12px; }
+.pathbar .station.on { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.pathbar .station.done { color: var(--accent-2); }
+.patharrow { color: var(--muted); }
+.btnrow.center { justify-content: center; margin-top: 10px; }
+
+/* ---------- VM-Zentrale: zwei Karten ---------- */
+.vmcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; margin: 8px 0 14px; }
+.vmcard { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 0; }
+.vmcard.active { border-color: var(--accent-2); }
+.vmcard h4 { margin-top: 0; }
+.snapbox { margin-top: 8px; }
+.snapbox summary { cursor: pointer; color: var(--muted); font-size: 13px; }
