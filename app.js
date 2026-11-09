@@ -194,6 +194,95 @@ function makeRemote(modeName, shell) { return {
 const ssh = makeRemote("ssh");
 const ps = makeRemote("ps", "pwsh");
 const win = makeRemote("win");   // echte Windows PowerShell 5.1 in der Windows-Sandbox
+/* ===== Backend 4: SQL-Konsole (sql.js = SQLite als WebAssembly, läuft komplett im Browser) ===== */
+const sqlb = {
+  SQL: null, db: null, dbId: null, loading: null, history: [], hpos: 0,
+  send() {}, resize() {},
+  /* sql.js einmalig laden */
+  init() {
+    if (this.SQL) return Promise.resolve(this.SQL);
+    if (typeof initSqlJs !== "function") return Promise.reject(new Error("sql.js fehlt (lib/sql-wasm.js)"));
+    return (this.loading ||= initSqlJs({ locateFile: (f) => "lib/" + f }).then((S) => (this.SQL = S)));
+  },
+  /* Datenbank eines Falls laden (frisch), sofern nicht schon geladen */
+  async use(id, { fresh = false } = {}) {
+    if (!fresh && this.db && this.dbId === id) return;
+    const src = (window.SQL_DBS || {})[id];
+    if (!src) throw new Error(`Unbekannte Datenbank: ${id}`);
+    const S = await this.init();
+    if (this.db) this.db.close();
+    this.db = new S.Database();
+    this.db.exec(src.sql);
+    this.dbId = id;
+    sqlRenderSchema();
+    $("#sql-dbname").textContent = `· Datenbank: ${src.title}`;
+  },
+};
+/* Ergebnis als Text (für die Schrittprüfung): Kopfzeile, dann je Zeile „wert | wert“ */
+const sqlText = (res) => res.map((r) => [r.columns.join(" | "), ...r.values.map((v) => v.map((x) => (x === null ? "NULL" : String(x))).join(" | "))].join("\n")).join("\n\n");
+function sqlTable(r) {
+  const head = r.columns.map((c) => `<th>${escapeHtml(c)}</th>`).join("");
+  const rows = r.values.slice(0, 500).map((v) => `<tr>${v.map((x) => x === null ? `<td class="null">NULL</td>` : `<td${typeof x === "number" ? ' class="num"' : ""}>${escapeHtml(x)}</td>`).join("")}</tr>`).join("");
+  return `<table><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>
+    <p class="sql-msg">${r.values.length} Zeile${r.values.length === 1 ? "" : "n"}${r.values.length > 500 ? " (die ersten 500 angezeigt)" : ""}</p>`;
+}
+function sqlRenderSchema() {
+  const el = $("#sql-schema");
+  if (!sqlb.db) { el.innerHTML = ""; return; }
+  const tables = sqlb.db.exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")[0]?.values.map((v) => v[0]) || [];
+  el.innerHTML = `<div class="muted small">Tabellen – Klick zeigt alle Zeilen</div>` + tables.map((t) => {
+    const cols = sqlb.db.exec(`PRAGMA table_info("${t.replace(/"/g, "")}")`)[0]?.values.map((v) => v[1]) || [];
+    return `<h5><button data-sqltable="${escapeHtml(t)}" title="SELECT * FROM ${escapeHtml(t)};">${escapeHtml(t)}</button></h5><ul>${cols.map((c) => `<li>${escapeHtml(c)}</li>`).join("")}</ul>`;
+  }).join("");
+}
+async function sqlRun(q = $("#sql-input").value) {
+  q = q.trim();
+  if (!q) return;
+  lastActivity = Date.now();
+  const out = $("#sql-out");
+  const lesson = LESSONS[progress.lesson];
+  try { await sqlb.use(lesson?.mode === "sql" && lesson.db ? lesson.db : sqlb.dbId || Object.keys(window.SQL_DBS || {})[0]); }
+  catch (e) { out.innerHTML = `<p class="sql-msg err">${escapeHtml(e.message)}</p>`; return; }
+  if (sqlb.history[sqlb.history.length - 1] !== q) sqlb.history.push(q);
+  sqlb.hpos = sqlb.history.length;
+  let text;
+  try {
+    const res = sqlb.db.exec(q);
+    const changed = sqlb.db.getRowsModified();
+    if (res.length) { out.innerHTML = res.map(sqlTable).join(""); text = sqlText(res); }
+    else { out.innerHTML = `<p class="sql-msg ok">✓ Ausgeführt${changed ? ` – ${changed} Zeile${changed === 1 ? "" : "n"} geändert` : " – keine Ergebniszeilen"}.</p>`; text = changed ? `${changed} rows affected` : ""; }
+    if (/^\s*(create|drop|alter)\b/i.test(q)) sqlRenderSchema();
+  } catch (e) {
+    out.innerHTML = `<p class="sql-msg err">Fehler: ${escapeHtml(e.message)}</p>`;
+    text = "ERROR: " + e.message;   // zählt in der Prüfung als Fehlerzeile
+  }
+  onCommandFinished(q, text);
+}
+$("#sql-go").addEventListener("click", () => sqlRun());
+$("#sql-input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sqlRun(); return; }
+  if ((e.key === "ArrowUp" || e.key === "ArrowDown") && (e.ctrlKey || e.metaKey) && sqlb.history.length) {
+    e.preventDefault();
+    sqlb.hpos = Math.max(0, Math.min(sqlb.history.length, sqlb.hpos + (e.key === "ArrowUp" ? -1 : 1)));
+    e.target.value = sqlb.history[sqlb.hpos] || "";
+  }
+});
+$("#sql-schema").addEventListener("click", (e) => {
+  const t = e.target.closest("[data-sqltable]");
+  if (t) { const q = `SELECT * FROM ${t.dataset.sqltable};`; $("#sql-input").value = q; sqlRun(q); }
+});
+$("#sql-reset").addEventListener("click", async () => {
+  const id = sqlb.dbId || LESSONS[progress.lesson]?.db;
+  if (!id) return;
+  await sqlb.use(id, { fresh: true });
+  $("#sql-out").innerHTML = `<p class="sql-msg ok">↺ Datenbank frisch geladen.</p>`;
+});
+/* Datenbank der aktuellen SQL-Lektion bereitstellen */
+function sqlEnsure(lesson) {
+  if (lesson?.mode !== "sql" || !lesson.db) return;
+  sqlb.use(lesson.db).catch((e) => { $("#sql-out").innerHTML = `<p class="sql-msg err">${escapeHtml(e.message)}</p>`; });
+}
+
 const isRemote = () => mode === "ssh" || mode === "ps";
 const remote = () => (mode === "ps" ? ps : mode === "win" ? win : ssh);
 const vmMode = () => (settings.track === "windows" ? "ps" : "ssh");
@@ -271,7 +360,7 @@ async function connectManaged({ quiet, vm: want } = {}) {
 }
 
 /* ===== Gemeinsam: Befehle verfolgen ===== */
-const backend = () => (mode === "browser" ? vm : mode === "ps" ? ps : mode === "win" ? win : ssh);
+const backend = () => (mode === "browser" ? vm : mode === "sql" ? sqlb : mode === "ps" ? ps : mode === "win" ? win : ssh);
 
 // Nur den Prompt am Ende entfernen – Ausgaben ohne Zeilenende (z. B. curl) kleben sonst davor und gingen verloren
 const stripPrompt = (o) => isPS() ? o.replace(/PS [^\n]*> ?$/, "") : o.replace(/(?:[\w.-]+@[\w.-]+:[^\n]*?|(?:^|\n)[~\/][^\n\s]*\s?)?[#$%] $/, "");
@@ -342,6 +431,7 @@ term.onData((data) => {
 let umlautHint = false;
 
 function insertCommand(text) {
+  if (mode === "sql") { const i = $("#sql-input"); i.value = text; i.focus(); return; }
   const multi = text.includes("\n");
   lastInserted = multi ? text : null;
   backend().send("\x15");  // Strg+U leert vorher die Zeile
@@ -382,6 +472,8 @@ function updateStatus() {
   if (mode === "browser") {
     cls = vm.loggedIn ? "running" : "booting";
     text = vm.loggedIn ? "Mini-Linux läuft · du bist root" : "Mini-Linux startet …";
+  } else if (mode === "sql") {
+    cls = "running"; text = "SQL-Konsole · SQLite im Browser";
   } else if (STATIC) {
     text = "Online-Demo · nur Mini-Linux";
   } else if (mode === "win") {
@@ -445,6 +537,10 @@ function setMode(m) {
   if (m === "browser") {
     term.write(replayable(vm.scroll));
     if (!vm.scroll) bootBanner();
+  } else if (m === "sql") {
+    sqlEnsure(LESSONS[progress.lesson]);
+    if (!sqlb.db) sqlb.use(LESSONS[progress.lesson]?.db || Object.keys(window.SQL_DBS || {})[0]).catch(() => {});
+    setTimeout(() => $("#sql-input").focus(), 50);
   } else {
     const R = remote();
     if (STATIC) {
@@ -907,13 +1003,15 @@ function renderLesson(scrollToActive = false) {
   // Solange das Terminal nirgends verbunden ist, folgt die aktive VM der Lektion
   if (lessonVm(lesson) && ![ssh, ps].some((R) => R.connected || R.connecting) && !(job && !job.done)) activeVm = lessonVm(lesson);
   let html = `<h2>${lesson.title}</h2>`;
-  if (STATIC && lmode !== "browser") {
+  if (STATIC && lmode !== "browser" && lmode !== "sql") {
     html += `<div class="box warn">📖 Diese Lektion kannst du hier lesen. Zum Mitmachen brauchst du ${lmode === "win" ? "die Windows-Sandbox" : "die Übungs-VM"}. ${DEMO_MSG}</div>`;
   } else if (lmode !== mode) {
     html += lmode === "win"
       ? (mode === "win" ? "" : `<div class="box warn">Diese Lektion läuft in der <b>Windows-Sandbox</b> – einem echten Windows. <button data-mode="win">🪟 Zur Windows-Sandbox</button></div>`)
       : lmode === "ps"
       ? `<div class="box warn">Diese Lektion läuft in <b>PowerShell</b>. <button data-mode="ps">⚡ Zu PowerShell wechseln</button></div>`
+      : lmode === "sql"
+      ? `<div class="box warn">Diese Lektion läuft in der <b>SQL-Konsole</b> – eine echte Datenbank direkt im Browser. <button data-mode="sql">🗄 Zur SQL-Konsole</button></div>`
       : lmode === "ssh"
       ? `<div class="box warn">Diese Lektion läuft in deiner <b>${VM_LABEL[lessonVm(lesson)]}</b> (Ubuntu). <button data-mode="ssh">🔌 Zur echten VM wechseln</button></div>`
       : `<div class="box warn">Diese Lektion ist fürs <b>Mini-Linux</b> gedacht (geht aber meist auch auf der VM). <button data-mode="browser">🖥 Zum Mini-Linux wechseln</button></div>`;
@@ -925,6 +1023,7 @@ function renderLesson(scrollToActive = false) {
       : `<div class="box warn">Die Sandbox läuft noch nicht. <button data-action="sb-start" class="primary">▶ Sandbox starten</button></div>`;
   }
   if (!STATIC && lmode === mode && (lmode === "ssh" || lmode === "ps")) html += vmBox(lesson);
+  if (lmode === "sql" && mode === "sql") sqlEnsure(lesson);
   if (lesson.topic) html = pathBar(lesson.topic, lesson.stage) + html;
   html += `<p class="intro">${lesson.intro}</p>`;
   lesson.steps.forEach((s, i) => {
@@ -940,6 +1039,7 @@ function renderLesson(scrollToActive = false) {
     }
     if (s.task) html += `<div class="task">${s.task}</div>`;
     if (s.hint) html += `<details class="hint"><summary>Tipp anzeigen</summary>${s.hint}</details>`;
+    if (s.solution) html += `<details class="hint"><summary>Lösung zeigen</summary><div class="cmd"><pre>${escapeHtml(s.solution)}</pre><button data-cmd="${escapeHtml(s.solution)}" title="In das Eingabefeld übernehmen">⌨ übernehmen</button></div></details>`;
     if (s.explain) html += `<div class="explain">${s.explain}</div>`;
     if (!done.has(i)) {
       html += s.check
@@ -950,9 +1050,14 @@ function renderLesson(scrollToActive = false) {
   });
   if (lesson.outro) html += `<div class="box tip">${lesson.outro}</div>`;
   if (active === -1) {
-    const next = lesson.topic ? stations(lesson.topic).find((s) => s.stage > lesson.stage && s.items.length) : null;
-    html += `<div class="lesson-done">🎉 Lektion abgeschlossen!${next ? "" : progress.lesson < trackIdx().slice(-1)[0] ? " Weiter geht's mit der nächsten." : ""}<br><small>Neue Trainingskarten sind jetzt im Tab 🔁 Training freigeschaltet.</small>
-      ${next ? `<div class="btnrow center"><button class="primary" data-goto="${lesson.topic}:${next.stage}">Weiter: ${STAGES[next.stage].icon} ${STAGES[next.stage].name} →</button></div>` : ""}</div>`;
+    // erst offene Lektionen derselben Station (z. B. Teil 2 eines Falls), dann die nächste Station
+    const st = lesson.topic ? stations(lesson.topic) : [];
+    const sameOpen = st.find((s) => s.stage === lesson.stage)?.items.find((x) => !x.done && x.ref.id !== lesson.id);
+    const next = sameOpen ? null : st.find((s) => s.stage > lesson.stage && s.items.length);
+    const btn = sameOpen ? `Weiter: ${escapeHtml(sameOpen.ref.title)} →` : next ? `Weiter: ${STAGES[next.stage].icon} ${STAGES[next.stage].name} →` : "";
+    const goto = sameOpen ? lesson.stage : next?.stage;
+    html += `<div class="lesson-done">🎉 Lektion abgeschlossen!${btn ? "" : progress.lesson < trackIdx().slice(-1)[0] ? " Weiter geht's mit der nächsten." : ""}<br><small>Neue Trainingskarten sind jetzt im Tab 🔁 Training freigeschaltet.</small>
+      ${btn ? `<div class="btnrow center"><button class="primary" data-goto="${lesson.topic}:${goto}">${btn}</button></div>` : ""}</div>`;
   }
   $("#lesson").innerHTML = subIP(html);
   renderNav();
