@@ -95,7 +95,17 @@ const vm = {
   emulator: null, loggedIn: false, bootLog: "", scroll: "",
   // serielle Schnittstelle arbeitet byteweise → Umlaute als UTF-8-Bytes senden
   send(s) { this.emulator?.serial0_send(unescape(encodeURIComponent(s))); },
-  resize() { if (this.loggedIn) this.send(`stty rows ${term.rows} cols ${term.cols}\n`); },
+  // Neue Fenstergröße mitteilen – aber unsichtbar (die Shell würde den Befehl sonst anzeigen, siehe vmFlush),
+  // nur bei echter Änderung und nur an einer leeren Eingabezeile (sonst landet stty mitten in einem Befehl oder in vi)
+  lastSize: "", mute: 0, held: "",
+  resize() {
+    if (!this.loggedIn) return;
+    const size = `${term.rows}x${term.cols}`;
+    if (size === this.lastSize) return;
+    if (mode !== "browser" || currentInputLine() !== "") { clearTimeout(this.resizeRetry); this.resizeRetry = setTimeout(() => this.resize(), 1500); return; }
+    this.lastSize = size; this.mute = Date.now();
+    this.send(`stty rows ${term.rows} cols ${term.cols}\n`);
+  },
 };
 const decoder = new TextDecoder();
 let vmPending = "", vmFlushScheduled = false;
@@ -106,7 +116,15 @@ function vmOnByte(b) {
 }
 function vmFlush() {
   vmFlushScheduled = false;
-  const chunk = vmPending; vmPending = "";
+  let chunk = vmPending; vmPending = "";
+  if (vm.mute) {
+    // Echo des unsichtbaren stty-Befehls samt neuem Prompt herausschneiden – dann bleibt der alte Prompt einfach stehen
+    vm.held += chunk;
+    const done = /stty rows \d+ cols \d+\n[^\n]*[#$] $/.test(vm.held.replace(ANSI_RE, ""));
+    if (!done && Date.now() - vm.mute < 1000) { if (!vmFlushScheduled) { vmFlushScheduled = true; setTimeout(vmFlush, 50); } return; }
+    chunk = vm.held.replace(/stty rows \d+ cols \d+\r?\n(?:[^\n]*?[#$] )?/, "");
+    vm.held = ""; vm.mute = 0;
+  }
   vm.scroll = (vm.scroll + chunk).slice(-60000);
   const clean = chunk.replace(ANSI_RE, "");
   if (mode === "browser") term.write(chunk);
@@ -115,6 +133,7 @@ function vmFlush() {
     if (/login: ?$/.test(vm.bootLog)) { vm.bootLog = ""; vm.send("root\n"); }
     else if (PROMPT_RE.test(vm.bootLog)) {
       vm.loggedIn = true; vm.bootLog = "";
+      vm.lastSize = `${term.rows}x${term.cols}`;
       vm.send(`stty rows ${term.rows} cols ${term.cols}; export PS1='\\w # '; cd ~; clear\n`);
       if (mode === "browser") { updateStatus(); setTimeout(() => term.focus(), 200); if (settings.tab === "wargame") renderWargame(); }
     }
