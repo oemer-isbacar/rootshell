@@ -28,6 +28,10 @@ INSERT INTO bestellungen (kunde_id, datum, betrag) VALUES (1,'2026-11-02',120.50
   (1,'2026-11-06',77.10), (4,'2026-11-07',230.00), (6,'2026-11-08',19.99);
 SQL
 `;
+/* PowerShell 7 in der Übungs-VM bereitstellen (falls der Basis-Snapshot es noch nicht enthält) */
+const NEED_PWSH = `
+command -v pwsh >/dev/null || { echo "Installiere PowerShell 7 …"; snap install powershell --classic >/dev/null; }
+`;
 const MISSIONS = [
 {
   id: "m-disk", topic: "linux", level: 1, title: "Die Platte läuft voll",
@@ -598,14 +602,14 @@ echo "✅ kunden ist wiederhergestellt, und keine Bestellung von heute ging verl
 },
 /* ---------- PowerShell-Kurs (track: windows) – du arbeitest als ubuntu in PowerShell, geprüft wird von außen ---------- */
 {
-  id: "mps-report", track: "windows", level: 1, title: "Bericht für die Chefin",
+  id: "mps-report", topic: "ps", track: "windows", level: 1, title: "Bericht für die Chefin",
   story: `Die IT-Leiterin will wissen, welche Programme auf dem Server am meisten Arbeitsspeicher brauchen – als Datei, die sie in Excel öffnen kann.`,
   goal: `Lege die Datei <code>~/berichte/top5.csv</code> an: die <b>5 Prozesse mit dem meisten Arbeitsspeicher</b>, Spalten <code>Name</code>, <code>Id</code> und <code>WorkingSet</code>.`,
   hints: [`Sortieren: <code>Get-Process | Sort-Object WorkingSet -Descending</code>`,
           `Spalten und Anzahl wählst du mit <code>Select-Object -First 5 Name, Id, WorkingSet</code>.`,
           `<code>Export-Csv</code> legt keine Ordner an – den Ordner <code>~/berichte</code> musst du vorher mit <code>New-Item -ItemType Directory</code> erstellen.`],
   solution: `<code>New-Item -ItemType Directory ~/berichte -Force; Get-Process | Sort-Object WorkingSet -Descending | Select-Object -First 5 Name, Id, WorkingSet | Export-Csv ~/berichte/top5.csv</code>`,
-  setup: `rm -rf /home/ubuntu/berichte && echo ok`,
+  setup: NEED_PWSH + `rm -rf /home/ubuntu/berichte && echo ok`,
   verify: `f=/home/ubuntu/berichte/top5.csv
 [ -f "$f" ] || { echo "❌ Die Datei ~/berichte/top5.csv gibt es noch nicht."; exit 1; }
 head=$(grep -v '^#' "$f" | head -1)
@@ -618,14 +622,14 @@ vals=$(grep -v '^#' "$f" | tail -n +2 | cut -d, -f$col | tr -d '"')
 echo "✅ Bericht passt – 5 Prozesse, richtig sortiert. Die Chefin ist zufrieden."`,
 },
 {
-  id: "mps-log", track: "windows", level: 2, title: "Wie viele Fehler hatte die App?",
+  id: "mps-log", topic: "ps", track: "windows", level: 2, title: "Wie viele Fehler hatte die App?",
   story: `Die Entwickler fragen, wie oft die Anwendung diese Woche einen Fehler geloggt hat. Die Logs liegen in <code>~/logs</code> – verteilt auf mehrere Dateien.`,
   goal: `Zähle alle Zeilen mit dem Log-Level <code>ERROR</code> in <b>allen</b> <code>.log</code>-Dateien und schreibe <b>nur die Zahl</b> in <code>~/logs/fehler.txt</code>.`,
   hints: [`Schau dir erst an, wie eine Zeile aufgebaut ist: <code>Get-Content ~/logs/app-1.log -Head 5</code>`,
           `<code>Select-String -Path ~/logs/*.log -Pattern …</code> durchsucht alle Dateien. Mit <code>.Count</code> bekommst du die Anzahl.`,
           `Vorsicht: Nicht jede Zeile, in der „ERROR“ vorkommt, ist ein Fehler – das Log-Level steht zwischen Leerzeichen (<code>' ERROR '</code>).`],
   solution: `<code>(Select-String -Path ~/logs/*.log -Pattern ' ERROR ' -CaseSensitive).Count | Set-Content ~/logs/fehler.txt</code>`,
-  setup: `rm -rf /home/ubuntu/logs && mkdir -p /home/ubuntu/logs && cd /home/ubuntu/logs
+  setup: NEED_PWSH + `rm -rf /home/ubuntu/logs && mkdir -p /home/ubuntu/logs && cd /home/ubuntu/logs
 for i in 1 2 3; do
   for n in $(seq 1 $((RANDOM % 40 + 40))); do
     r=$((RANDOM % 10)); lvl=INFO; [ $r -eq 0 ] && lvl=ERROR; [ $r -eq 1 ] && lvl=WARN
@@ -645,14 +649,14 @@ alle=$(cat /home/ubuntu/logs/*.log | grep -c 'ERROR')
 echo "❌ In der Datei steht '$ist' – das stimmt nicht."; exit 1`,
 },
 {
-  id: "mps-cleanup", track: "windows", level: 2, title: "Aufräumen im Download-Ordner",
+  id: "mps-cleanup", topic: "ps", track: "windows", level: 2, title: "Aufräumen im Download-Ordner",
   story: `Der Download-Ordner eines Servers läuft voll. Die Regel im Team: Alles, was älter als 30 Tage ist, darf weg – neuere Dateien müssen bleiben.`,
   goal: `Lösche in <code>~/downloads</code> alle Dateien, die <b>älter als 30 Tage</b> sind (letzte Änderung). Neuere Dateien bleiben liegen.`,
   hints: [`<code>Get-ChildItem ~/downloads | Select-Object Name, LastWriteTime</code> zeigt das Alter.`,
           `Das Stichtagsdatum: <code>(Get-Date).AddDays(-30)</code>. Filtern mit <code>Where-Object LastWriteTime -lt …</code>`,
           `Erst mit <code>Remove-Item -WhatIf</code> testen, dann ohne.`],
   solution: `<code>Get-ChildItem ~/downloads -File | Where-Object LastWriteTime -lt (Get-Date).AddDays(-30) | Remove-Item</code>`,
-  setup: `rm -rf /home/ubuntu/downloads && mkdir -p /home/ubuntu/downloads && cd /home/ubuntu/downloads
+  setup: NEED_PWSH + `rm -rf /home/ubuntu/downloads && mkdir -p /home/ubuntu/downloads && cd /home/ubuntu/downloads
 for f in setup-alt.exe treiber_2024.zip rechnung-0815.pdf bild001.jpg backup-juni.tar log-export.csv vorlage-alt.docx; do
   head -c $((RANDOM * 10)) /dev/urandom > "$f"; touch -d "-$((RANDOM % 200 + 35)) days" "$f"; done
 for f in angebot-aktuell.pdf firmware-neu.bin notizen.txt foto-team.jpg update-paket.zip; do
@@ -666,14 +670,14 @@ neu=0; for f in angebot-aktuell.pdf firmware-neu.bin notizen.txt foto-team.jpg u
 echo "✅ Aufgeräumt: alte Dateien weg, die 5 neuen sind noch da."`,
 },
 {
-  id: "mps-onboard", track: "windows", level: 3, title: "Neue Mitarbeiter einrichten",
+  id: "mps-onboard", topic: "ps", track: "windows", level: 3, title: "Neue Mitarbeiter einrichten",
   story: `Die Personalabteilung schickt eine Liste mit neuen Kolleginnen und Kollegen (<code>~/import/neue.csv</code>, frisch aus Excel). Für jede Person braucht es einen persönlichen Ordner.`,
   goal: `Lege für jede Person den Ordner <code>~/homes/&lt;Abteilung&gt;/&lt;vorname.nachname&gt;</code> an (alles <b>kleingeschrieben</b>) und darin die Datei <code>willkommen.txt</code> mit dem Text <code>Hallo &lt;Vorname&gt;</code>.`,
   hints: [`Schau dir die Datei an: <code>Get-Content ~/import/neue.csv</code> – welches Trennzeichen nutzt sie?`,
           `<code>Import-Csv ~/import/neue.csv -Delimiter ';'</code> liefert ein Objekt pro Person. Dann mit <code>foreach</code> durchgehen.`,
           `Kleinschreibung: <code>.ToLower()</code>. Ordner samt Unterordnern: <code>New-Item -ItemType Directory -Force</code>, Datei: <code>Set-Content</code>.`],
   solution: `<code>foreach ($p in Import-Csv ~/import/neue.csv -Delimiter ';') { $d = "$HOME/homes/$($p.Abteilung.ToLower())/$($p.Vorname.ToLower()).$($p.Nachname.ToLower())"; New-Item -ItemType Directory $d -Force | Out-Null; Set-Content "$d/willkommen.txt" "Hallo $($p.Vorname)" }</code>`,
-  setup: `rm -rf /home/ubuntu/homes /home/ubuntu/import && mkdir -p /home/ubuntu/import
+  setup: NEED_PWSH + `rm -rf /home/ubuntu/homes /home/ubuntu/import && mkdir -p /home/ubuntu/import
 cat > /home/ubuntu/import/neue.csv <<'EOF'
 Vorname;Nachname;Abteilung;Eintritt
 Lena;Hoffmann;Vertrieb;01.12.2026
@@ -827,7 +831,7 @@ echo "✅ toplog.sh funktioniert – mit fremden Logs, Standardwert und im Fehle
 },
 /* ---------- Skript-Missionen PowerShell (track: windows, PowerShell 7 in der VM) ---------- */
 {
-  id: "mps-konvert", track: "windows", level: 2, title: "Skript: Benutzerliste umwandeln",
+  id: "mps-konvert", topic: "ps-script", track: "windows", level: 2, title: "Skript: Benutzerliste umwandeln",
   story: `Die Personalabteilung liefert neue Mitarbeiter als CSV aus Excel. Das Anlage-Werkzeug der IT braucht aber JSON – mit fertigen Benutzernamen ohne Umlaute. Das soll ab jetzt jeden Monat ein Skript erledigen.`,
   goal: `Schreibe <code>~/skripte/Convert-Benutzer.ps1</code> mit den Pflichtparametern <code>-CsvPfad</code> und <code>-ZielPfad</code>. Es liest die CSV (Trennzeichen <code>;</code>, Spalten Vorname, Nachname, Abteilung) und schreibt eine JSON-Liste mit den Eigenschaften <code>Benutzername</code> (<code>vorname.nachname</code>, klein, ä→ae, ö→oe, ü→ue, ß→ss), <code>Name</code> („Vorname Nachname“) und <code>Abteilung</code>. Zeilen ohne Abteilung werden mit <code>Write-Warning</code> übersprungen; dann ist der Exit-Code 1, sonst 0. Zum Ausprobieren: <code>~/hr/neue.csv</code>.`,
   hints: [`<code>param([Parameter(Mandatory)][string]$CsvPfad, …)</code> und <code>Import-Csv $CsvPfad -Delimiter ';'</code>`,
@@ -842,7 +846,7 @@ $liste = foreach ($p in Import-Csv $CsvPfad -Delimiter ';') {
 }
 ConvertTo-Json -InputObject @($liste) | Set-Content $ZielPfad
 if ($fehlt) { exit 1 }</pre>`,
-  setup: `rm -rf /home/ubuntu/skripte/Convert-Benutzer.ps1 /home/ubuntu/hr
+  setup: NEED_PWSH + `rm -rf /home/ubuntu/skripte/Convert-Benutzer.ps1 /home/ubuntu/hr
 mkdir -p /home/ubuntu/skripte /home/ubuntu/hr
 cat > /home/ubuntu/hr/neue.csv <<'EOF'
 Vorname;Nachname;Abteilung
@@ -893,7 +897,7 @@ rm -rf "$D"
 echo "✅ Klappt auch mit fremden Daten: Umlaute, fehlende Abteilung und Exit-Code stimmen."`,
 },
 {
-  id: "mps-rotate", track: "windows", level: 3, title: "Skript: Log-Rotation",
+  id: "mps-rotate", topic: "ps-script", track: "windows", level: 3, title: "Skript: Log-Rotation",
   story: `Eine Anwendung schreibt ihre Logs seit Jahren in dieselben Dateien – inzwischen mehrere Gigabyte. Gewünscht ist eine Rotation, wie Linux sie mit logrotate macht: Das aktuelle Log wird zu <code>.1</code>, das alte <code>.1</code> zu <code>.2</code> usw., die ältesten fliegen raus.`,
   goal: `Schreibe <code>~/skripte/Invoke-LogRotation.ps1 -Pfad ORDNER [-Behalten 3]</code>. Für <b>jede</b> <code>.log</code>-Datei im Ordner: Dateien ab <code>name.log.&lt;Behalten&gt;</code> löschen, <code>name.log.N</code> zu <code>name.log.N+1</code> umbenennen, <code>name.log</code> zu <code>name.log.1</code> und danach eine neue, leere <code>name.log</code> anlegen. Andere Dateien bleiben unberührt. Zum Ausprobieren: <code>~/applogs</code>.`,
   hints: [`Alle Logs: <code>Get-ChildItem $Pfad -Filter *.log -File</code>. Für jedes Log arbeitest du mit dem vollen Pfad <code>$log.FullName</code>.`,
@@ -909,7 +913,7 @@ foreach ($log in Get-ChildItem $Pfad -Filter *.log -File) {
     Move-Item $basis "$basis.1" -Force
     New-Item $basis -ItemType File | Out-Null
 }</pre>`,
-  setup: `rm -rf /home/ubuntu/applogs /home/ubuntu/skripte/Invoke-LogRotation.ps1
+  setup: NEED_PWSH + `rm -rf /home/ubuntu/applogs /home/ubuntu/skripte/Invoke-LogRotation.ps1
 mkdir -p /home/ubuntu/applogs /home/ubuntu/skripte
 for i in 1 2 3 4 5; do echo "Eintrag $i" >> /home/ubuntu/applogs/shop.log; done
 echo "von gestern" > /home/ubuntu/applogs/shop.log.1
@@ -945,7 +949,7 @@ echo "✅ Log-Rotation funktioniert – mit mehreren Logs und unterschiedlicher 
 },
 /* ---------- Windows-Sandbox (track: windows, target: sandbox) – Setup & Prüfung laufen als PowerShell-Skript in der Sandbox ---------- */
 {
-  id: "mws-spooler", track: "windows", target: "sandbox", level: 1, title: "Niemand kann drucken",
+  id: "mws-spooler", topic: "ps", track: "windows", target: "sandbox", level: 1, title: "Niemand kann drucken",
   story: `Montagmorgen, das Telefon klingelt: „Der Drucker geht nicht! Bei allen!“ Am Drucker selbst ist alles in Ordnung – das Problem liegt auf dem Druckserver.`,
   goal: `Bring den Druckdienst wieder zum Laufen – und sorg dafür, dass er auch nach dem nächsten Neustart <b>automatisch</b> startet.`,
   hints: [`Welcher Dienst ist für Druckaufträge zuständig? <code>Get-Service *spool*</code>`,
@@ -961,7 +965,7 @@ if ($s.Status -ne 'Running') { "❌ Starttyp passt, aber der Dienst läuft noch 
 "✅ Druckwarteschlange läuft und startet automatisch. Die Kollegen drucken wieder."`,
 },
 {
-  id: "mws-user", track: "windows", target: "sandbox", level: 2, title: "Neue Kollegin im Vertrieb",
+  id: "mws-user", topic: "ps", track: "windows", target: "sandbox", level: 2, title: "Neue Kollegin im Vertrieb",
   story: `Lisa Müller fängt heute im Vertrieb an. Sie braucht ein Konto auf dem Dateiserver und muss im Abteilungsordner <code>C:\\Daten\\Vertrieb</code> arbeiten können. Die Gruppe <code>Vertrieb</code> gibt es schon.`,
   goal: `Lege das lokale Konto <code>lisa.mueller</code> (aktiv, mit Passwort) an, nimm es in die Gruppe <code>Vertrieb</code> auf und gib der <b>Gruppe</b> im Ordner <code>C:\\Daten\\Vertrieb</code> das Recht <b>Ändern</b> – auch für Unterordner und Dateien.`,
   hints: [`Passwort als SecureString: <code>$pw = Read-Host -AsSecureString</code>, dann <code>New-LocalUser lisa.mueller -Password $pw</code>`,
@@ -990,7 +994,7 @@ if (-not $inh) { "❌ Das Recht gilt nur für den Ordner selbst – Unterordner 
 "✅ Lisa ist startklar: Konto aktiv, in der Gruppe Vertrieb, und die Gruppe darf im Ordner ändern."`,
 },
 {
-  id: "mws-firewall", track: "windows", target: "sandbox", level: 2, title: "Die Web-App ist nicht erreichbar",
+  id: "mws-firewall", topic: "ps", track: "windows", target: "sandbox", level: 2, title: "Die Web-App ist nicht erreichbar",
   story: `Auf dem Server läuft eine interne Web-Anwendung auf Port <b>8080</b>. Seit gestern kommt aus dem Netz niemand mehr dran. Der Kollege schwört: „Ich hab die Firewall-Regel doch angelegt!“`,
   goal: `Sorge dafür, dass Port <b>8080/TCP eingehend</b> durch die Windows-Firewall erlaubt ist. Die Firewall selbst bleibt <b>eingeschaltet</b> – und lösche keine fremden Regeln, die du nicht verstehst, ohne hinzusehen.`,
   hints: [`Gibt es die Regel des Kollegen? <code>Get-NetFirewallRule -DisplayName "*8080*" | Select-Object DisplayName, Enabled, Action</code>`,
@@ -1012,7 +1016,7 @@ if ($block) { "❌ Die Allow-Regel ist aktiv – aber diese Regel sperrt 8080 we
 "✅ Port 8080 ist offen, die Firewall bleibt an. Die alte Sperrregel war der Übeltäter."`,
 },
 {
-  id: "mws-task", track: "windows", target: "sandbox", level: 3, title: "Die Nachtsicherung läuft nicht",
+  id: "mws-task", topic: "ps", track: "windows", target: "sandbox", level: 3, title: "Die Nachtsicherung läuft nicht",
   story: `Jede Nacht soll die geplante Aufgabe <b>Nachtsicherung</b> das Skript <code>C:\\Skripte\\sicherung.ps1</code> starten. Laut Monitoring ist seit Wochen keine Sicherung mehr entstanden – die Aufgabe meldet einen Fehler.`,
   goal: `Finde heraus, warum die Aufgabe scheitert, und repariere sie. Starte sie danach einmal von Hand: Sie muss mit <code>LastTaskResult</code> <b>0</b> durchlaufen und <code>C:\\Backup\\ok.txt</code> erzeugen.`,
   hints: [`<code>Get-ScheduledTaskInfo Nachtsicherung</code> – der Fehlercode <code>LastTaskResult</code> ist ein Hinweis.`,

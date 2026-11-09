@@ -5,18 +5,40 @@ Links eine echte Shell, rechts das Tutorial. Jeder Schritt wird automatisch abge
 
 Gebaut für Azubis und Umschüler **Fachinformatiker Systemintegration (FISI)**, aber für alle nützlich, die Admin-Handwerk üben wollen. Alle Inhalte sind auf Deutsch.
 
-**▶ Online-Demo folgt in Kürze** – Mini-Linux, Lektionen, Training, Wargame und Prüfung laufen dann direkt im Browser, ohne Installation. Für Übungs-VM, PowerShell und Windows-Sandbox installierst du rootshell lokal.
+**▶ Online-Demo folgt in Kürze** – Mini-Linux, SQL-Krimis, Lektionen, Training, Wargame und Prüfung laufen dann direkt im Browser, ohne Installation. Für die VMs, PowerShell und die Windows-Sandbox installierst du rootshell lokal.
 
 ![rootshell: links das Terminal, rechts die Lektion](docs/screenshots/lektion.png)
 
 | Kurs | Umgebung | Inhalt |
 |---|---|---|
-| 🐧 **Linux** | Mini-Linux im Browser (sofort, ohne Setup) + Ubuntu-VM | Shell-Grundlagen bis LEMP, DNS, DHCP, Docker, Selbst-Hosting, **Bash-Skripte**, **IT-Security (Blue Team)**, **Netzwerk & Subnetting**, **Git & Docker** – 54 Lektionen, 24 Missionen |
-| 🪟 **Windows · PowerShell** | PowerShell 7 in der Ubuntu-VM + echtes Windows in der Windows-Sandbox | Pipeline, CSV/JSON, Dienste, Benutzer, NTFS, Registry, Firewall, geplante Aufgaben, **PowerShell-Skripte** – 25 Lektionen, 10 Missionen |
+| 🐧 **Linux** | Mini-Linux und SQL-Konsole im Browser + Übungs-VM + Server-VM | Shell-Grundlagen bis LEMP, DNS, DHCP, Docker, Selbst-Hosting, **Bash-Skripte**, **IT-Security (Blue Team)**, **Netzwerk & Subnetting**, **Git & Docker**, **Datenbanken mit SQL-Krimi** – 65 Lektionen, 28 Missionen |
+| 🪟 **Windows · PowerShell** | PowerShell 7 in der Übungs-VM + echtes Windows in der Windows-Sandbox | Pipeline, CSV/JSON, Dienste, Benutzer, NTFS, Registry, Firewall, geplante Aufgaben, **PowerShell-Skripte** – 25 Lektionen, 10 Missionen |
 | 🎓 **Prüfung** | Browser | Prüfungssimulation im IHK-Stil mit Note, Themen üben, endloser Subnetting-Trainer |
 | 🏴 **Wargame** | Mini-Linux im Browser | 15 Level Flaggenjagd im Stil von OverTheWire „Bandit“ |
 
-Nichts davon verändert deinen PC: Die VM und die Sandbox sind Wegwerf-Umgebungen.
+Nichts davon verändert deinen PC: Die VMs und die Sandbox laufen abgeschottet, die Übungs-VM ist eine Wegwerf-Umgebung.
+
+## Der Lernpfad: erst lernen, dann üben, dann anwenden
+
+Jedes Thema führt dich in vier Stationen vom Verstehen zum Können. Eine Leiste oben in der Lektion zeigt, wo du stehst, und führt zur nächsten Station.
+
+| Station | Wo | Was |
+|---|---|---|
+| **① Lernen** | Browser (Mini-Linux oder SQL-Konsole) | Grundlagen sofort ausprobieren, ohne Installation – auch in der Online-Demo |
+| **② Üben** | 🧪 **Übungs-VM** (Wegwerf) | Echte Werkzeuge an echtem Ubuntu. „Übung vorbereiten“ setzt die VM vorher zurück und richtet ein, was die Übung braucht – hier darf alles kaputtgehen |
+| **③ Anwenden** | 🖥 **Server-VM** (bleibt) bzw. echtes Windows | Echte Dienste Schritt für Schritt von Hand einrichten: WordPress, Gitea, Nextcloud, Samba, DNS … – dein eigener Server |
+| **④ Störfall** | 🧪 Übungs-VM bzw. Windows-Sandbox | Ein Fehler wird unbemerkt eingebaut, du findest und behebst ihn ohne Anleitung |
+
+| Thema | ① | ② | ③ | ④ |
+|---|---|---|---|---|
+| Linux-Grundlagen & Dienste | 9 | 4 | 10 | 8 |
+| Bash-Skripte | 1 | 5 | 1 | 3 |
+| Netzwerk | 1 | 5 | – | 3 |
+| IT-Security | 1 | 3 | 4 | 7 |
+| Git, Docker & Selbst hosten | 1 | 4 | 4 | 3 |
+| Datenbanken | 3 | 1 | 6 | 4 |
+| PowerShell & Windows-Verwaltung | – | 11 | 8 (Sandbox) | 8 |
+| PowerShell-Skripte | – | 6 | – | 2 |
 
 ## Installation
 
@@ -26,11 +48,11 @@ Nichts davon verändert deinen PC: Die VM und die Sandbox sind Wegwerf-Umgebunge
 |---|---|---|
 | Windows 10/11 | Host | ja |
 | [Node.js](https://nodejs.org) (LTS) | lokaler Server der App | ja |
-| Windows **Pro/Enterprise/Education** mit Hyper-V + [Multipass](https://multipass.run) | Ubuntu-VM (Linux Teil 2/3, PowerShell 7) | für die VM-Kurse – die App prüft und installiert das auf Knopfdruck |
+| Windows **Pro/Enterprise/Education** mit Hyper-V + [Multipass](https://multipass.run) | Übungs-VM und Server-VM (Ubuntu) | für ② bis ④ – die App prüft und installiert das auf Knopfdruck |
 | Windows-Feature **Windows-Sandbox** | echtes Windows für die Windows-Lektionen | nur für den Sandbox-Teil |
-| ca. 8 GB RAM | VM (2 GB) bzw. Sandbox (3 GB) | empfohlen |
+| ca. 8 GB RAM | Übungs-VM 1 GB, Server-VM 2 GB, Sandbox 3 GB – es läuft immer nur eine VM | empfohlen |
 
-Das Mini-Linux im Browser (Linux Teil 1) läuft ohne VM.
+Mini-Linux, SQL-Konsole, Prüfung und Wargame laufen ohne VM. Die VM-Zentrale zeigt, wie viel Arbeitsspeicher gerade frei ist, und warnt, bevor eine VM nicht starten kann.
 
 **Herunterladen und starten**
 
@@ -45,13 +67,24 @@ Beim ersten Start zeigt ein **🩺 Systemcheck**, was eingerichtet ist und was n
 
 Dein Lernstand wird im Browser gespeichert. Unter **📊 Fortschritt** siehst du ihn auf einen Blick und sicherst ihn als Datei – etwa vor dem Leeren des Browsers oder für den Umzug auf einen anderen PC.
 
-## Zwei Umgebungen
+## Die Umgebungen
 
 | Modus | Was | Wofür |
 |---|---|---|
-| 🖥 **Mini-Linux** | Echter Linux-Kernel mit BusyBox, emuliert im Browser (v86). Startet in Sekunden und braucht kein Setup. | Teil 1: Shell, Dateien, Rechte, Prozesse, vi, Skripte |
-| 🔌 **Echte VM** | Ubuntu-VM (Multipass/Hyper-V), die die App selbst anlegt und verwaltet | Teil 2 (FISI): apt, Benutzer, systemd, Netzwerk, SSH, ufw, Apache/nginx, MariaDB, **LEMP**, Samba, DNS, DHCP, LVM, cron, Docker, Fehlersuche |
-| 🏠 **Selbst hosten** | Läuft auf derselben VM | Teil 3: Uptime Kuma, Gitea, Caddy als Reverse Proxy, Pflege, Backups und Ideen fürs Homelab |
+| 🖥 **Mini-Linux** | Echter Linux-Kernel mit BusyBox, emuliert im Browser (v86). Startet in Sekunden und braucht kein Setup. | ① Lernen: Shell, Dateien, Rechte, Prozesse, vi, Skripte, Netzwerk-Grundlagen, Logs auswerten, diff & patch |
+| 🗄 **SQL-Konsole** | Echte Datenbank (SQLite als WebAssembly) im Browser, mit Tabellenübersicht | ① Lernen: SQL-Krimis |
+| 🧪 **Übungs-VM** `rs-uebung` | Ubuntu-VM (1 GB), wird vor jeder Übung und jedem Störfall auf den Snapshot „basis“ zurückgesetzt. Enthält PowerShell 7. | ② Üben und ④ Störfälle |
+| 🖥 **Server-VM** `fis-lab` | Ubuntu-VM (2 GB), bleibt bestehen – dein Server | ③ Anwenden: apt, SSH, ufw, nginx, MariaDB, LEMP, WordPress, Samba, DNS, DHCP, LVM, cron, Docker, Selbst-Hosting (Uptime Kuma, Gitea, Caddy, Nextcloud) |
+| 🪟 **Windows-Sandbox** | Echtes, frisches Windows 11 | ③ und ④ im Windows-Kurs |
+
+Beide VMs legt die App selbst an und verwaltet sie. Es läuft immer nur eine: Startest du die andere, wird die laufende pausiert.
+
+## 🗄️ Teil 8: Datenbanken
+
+- **① SQL-Krimis im Browser:** In *Fall 1 „Der verschwundene Laptop“* lernst du Schritt für Schritt `SELECT`, `WHERE`, `ORDER BY`, `JOIN`, `GROUP BY`, `LIKE`, `BETWEEN` und Unterabfragen. *Fall 2 „Das Datenleck“* ist offen: zwei Wochen Firmenalltag als Datenbank, Zwischenziele mit gestuften Tipps, die Lösung gibst du per `INSERT INTO loesung` ab.
+- **② SQL an echtem MariaDB** in der Übungs-VM.
+- **③ Anwenden auf der Server-VM:** MariaDB absichern, LEMP-Stack, **WordPress von Hand** (mit SQL an der echten WordPress-Datenbank: Passwort zurücksetzen, Adresse nach Umzug, Auswertungen), **Gitea mit MariaDB-Container** und **Nextcloud mit MariaDB** (occ, WebDAV, Cron, Sicherung mit Wartungsmodus).
+- **④ Vier Störfälle:** „Access denied“ (falsches GRANT), MariaDB startet nicht, fehlender Index, eine einzelne Tabelle aus der Sicherung holen – jeweils mit einer Falle für die naheliegende, aber falsche Lösung.
 
 ## 🪟 Windows · PowerShell
 
@@ -123,12 +156,14 @@ Baut auf den Netzwerk-Grundlagen aus Teil 2 auf und deckt ab, was in AP1/AP2 dra
 In der VM-Zentrale passiert alles, ohne dass du Multipass selbst öffnen musst:
 
 - **Voraussetzungen prüfen:** Windows-Edition, Hyper-V (Firmware, Feature, Dienst) und Multipass. Fehlt etwas, gibt es einen Knopf dafür. Multipass wird per winget installiert, Hyper-V wird mit Admin-Abfrage aktiviert und braucht danach einen Neustart.
-- **VM anlegen:** Ubuntu 24.04 mit 2 CPUs, 2 GB RAM und 15 GB Platte. Danach entsteht automatisch der Snapshot „frisch“, und die App verbindet sich per eigenem SSH-Schlüssel.
+- **Zwei Karten – Übungs-VM und Server-VM:** jede mit Zustand, IP, RAM, Platte, eigenen Knöpfen und Snapshots. Angelegt werden sie, sobald eine Lektion sie braucht (Knopf direkt in der Lektion) oder hier.
+- **VM anlegen:** Ubuntu 24.04 – Übungs-VM mit 1 CPU, 1 GB RAM, 8 GB Platte und PowerShell 7 (Snapshot „basis“), Server-VM mit 2 CPUs, 2 GB RAM, 15 GB Platte (Snapshot „frisch“). Die App verbindet sich per eigenem SSH-Schlüssel.
 - **Pause, Fortsetzen und Herunterfahren:** Pause friert die VM ein und gibt CPU frei. Herunterfahren gibt auch den RAM frei. Ohne Eingaben pausiert die App die VM nach einstellbarer Zeit (Standard 30 Minuten).
-- **Feierabend:** fährt die VM herunter, sichert das Mini-Linux und zeigt, wie viele Trainingskarten morgen fällig sind.
+- **Feierabend:** fährt die VMs herunter, sichert das Mini-Linux und zeigt, wie viele Trainingskarten morgen fällig sind.
 - **Snapshots:** anlegen, zurückspringen und löschen.
-- **⟲ Auf Werkszustand:** VM verbastelt? Ein Klick setzt sie auf den Snapshot „frisch“ zurück – auch direkt aus dem Missionen-Tab. Dein Lernfortschritt bleibt.
-- **Behalten oder löschen:** Die VM kann bleiben, zum Beispiel als Homelab-Spielwiese, oder komplett entfernt werden. Das Löschen musst du zweimal bestätigen.
+- **⟲ Zurücksetzen:** Übungs-VM auf „basis“, Server-VM auf „frisch“ – ein Klick, dein Lernfortschritt bleibt.
+- **Arbeitsspeicher:** zeigt, wie viel gerade frei ist, und warnt, bevor eine VM nicht starten kann.
+- **Behalten oder löschen:** Die Server-VM kann bleiben, zum Beispiel als Homelab-Spielwiese, oder komplett entfernt werden. Das Löschen musst du zweimal bestätigen.
 
 Login für manuelle SSH-Verbindungen: `ubuntu` / `linuxlab`. Das ist nur fürs lokale Lab gedacht.
 
@@ -147,7 +182,7 @@ Hinweis und Lösung gibt es nur auf Knopfdruck.
 
 ![Missionen](docs/screenshots/missionen.png)
 
-34 Störungen (24 Linux, 10 Windows) werden versteckt eingebaut, zum Beispiel volle Platte, CPU-Fresser, kaputte nginx-Konfiguration, Firewall, Cron, SSH-Rechte, 502 Bad Gateway, ein Container ohne Neustart, falsches Gateway oder ein fehlerhafter Git-Commit. Du findest und behebst sie selbst. „Prüfen“ kontrolliert das Ergebnis, Tipps gibt es schrittweise.
+38 Störungen (28 Linux, 10 Windows) werden versteckt eingebaut, zum Beispiel volle Platte, CPU-Fresser, kaputte nginx-Konfiguration, Firewall, Cron, SSH-Rechte, 502 Bad Gateway, ein Container ohne Neustart, falsches Gateway, ein fehlerhafter Git-Commit oder eine gelöschte Datenbanktabelle. Du findest und behebst sie selbst. „Prüfen“ kontrolliert das Ergebnis, Tipps gibt es schrittweise. Linux-Störfälle laufen in der Übungs-VM, die vorher zurückgesetzt wird – dein Server bleibt unberührt.
 
 ## Hinweise
 
@@ -160,9 +195,9 @@ Hinweis und Lösung gibt es nur auf Knopfdruck.
 
 | Befehl | Was | Braucht |
 |---|---|---|
-| `npm test` | Inhalts-Test: IDs, Pflichtfelder, Regex-Prüfungen, Musterlösungen der Karten, Verweise, Prüfungsfragen, Wargame-Level und 3000 zufällige Subnetting-Aufgaben gegen eine unabhängige Rechnung | nur Node – läuft auch in GitHub Actions |
-| `npm run test:vm` | Jede Linux-Mission auf der echten VM: Setup → Prüfung muss scheitern → Musterlösung → Prüfung muss bestehen. Vorher Snapshot, danach zurück – deine VM bleibt, wie sie war. | laufende Übungs-VM |
-| `npm run test:vm-lessons -- --group net --snapshot` | Spielt Lektionen auf der VM durch und bewertet jeden Schritt mit derselben Prüfung wie die App | laufende Übungs-VM |
+| `npm test` | Inhalts-Test: IDs, Pflichtfelder, Regex-Prüfungen, Musterlösungen der Karten, Lernpfad (Thema/Stufe/VM), jede SQL-Musterlösung gegen ihre Fall-Datenbank, offene Fälle nehmen nur den richtigen Namen an, Prüfungsfragen, Wargame-Level und 3000 zufällige Subnetting-Aufgaben gegen eine unabhängige Rechnung | nur Node – läuft auch in GitHub Actions (ohne `npm install`) |
+| `npm run test:vm` | Jede Linux-Mission auf der echten VM: Setup → Prüfung muss scheitern → Musterlösung → Prüfung muss bestehen. Standard: Übungs-VM (`--vm server` für die Server-VM). | laufende VM |
+| `npm run test:vm-lessons -- --vm uebung --reset-each --group net` | Spielt Bash- und PowerShell-Lektionen auf der VM durch und bewertet jeden Schritt mit derselben Prüfung wie die App. `--reset-each` setzt die Übungs-VM wie die App vor jeder Lektion zurück; `--snapshot` sichert die Server-VM vorher und spielt die Sicherung danach zurück. | laufende VM |
 | `npm run build:demo` | Baut die Online-Demo nach `dist/demo` | nur Node |
 
 ## Mitmachen
