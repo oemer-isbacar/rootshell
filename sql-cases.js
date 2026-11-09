@@ -5,6 +5,94 @@
  */
 window.SQL_DBS = window.SQL_DBS || {};
 
+/* ---------- Fall 2: Das Datenleck (offen ermitteln) ----------
+ * Größere Datenbank: Ein Generator mit festem Startwert erzeugt zwei Arbeitswochen Alltagsrauschen
+ * (Logins, CRM-Exporte, USB, Zutritte). Darin stecken die Spuren der Tatnacht am 30.10.
+ * Lösung über INSERT INTO loesung – geprüft per Hash in lessons-db.js, nicht im Klartext.
+ */
+window.SQL_DBS.krimi2 = {
+  title: "Fall 2 · Das Datenleck",
+  get sql() {
+    let seed = 20261103;
+    const rnd = () => { seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    const pick = (a) => a[Math.floor(rnd() * a.length)];
+    const two = (n) => String(n).padStart(2, "0");
+    const at = (day, h, m) => `${day} ${two(h)}:${two(m)}`;
+    const q = (s) => `'${String(s).replace(/'/g, "''")}'`;
+    const P = [   // id, name, abteilung, benutzer, karte, rechner, raum
+      [1, "Jonas Weber", "IT", "jweber", "K-104", "PC-101", "IT-Büro"], [2, "Mehmet Arslan", "IT", "marslan", "K-121", "PC-102", "IT-Büro"],
+      [3, "Sabine Krüger", "Buchhaltung", "skrueger", "K-117", "PC-221", "Buchhaltung"], [4, "Elif Yıldız", "Buchhaltung", "eyildiz", "K-118", "PC-222", "Buchhaltung"],
+      [5, "Ayşe Kaya", "IT", "akaya", "K-102", "PC-103", "IT-Büro"], [6, "Lena Schmidt", "Vertrieb", "lschmidt", "K-138", "PC-305", "Vertrieb"],
+      [7, "Petra Hoffmann", "Personal", "phoffmann", "K-140", "PC-401", "Personal"], [8, "Murat Demir", "Lager", "mdemir", "K-150", "PC-501", "Lager"],
+      [9, "Frank Neumann", "Geschäftsführung", "fneumann", "K-101", "PC-001", "Geschäftsführung"], [10, "Nina Wolf", "Lager", "nwolf", "K-151", "PC-502", "Lager"],
+      [11, "Tobias Bauer", "Vertrieb", "tbauer", "K-133", "PC-307", "Vertrieb"], [12, "Kai Richter", "Vertrieb", "krichter", "K-135", "PC-306", "Vertrieb"],
+      [13, "Jana Lorenz", "Vertrieb", "jlorenz", "K-139", "PC-308", "Vertrieb"], [14, "Ole Brandt", "Buchhaltung", "obrandt", "K-119", "PC-223", "Buchhaltung"],
+    ];
+    const days = ["2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-11-02", "2026-11-03", "2026-11-04", "2026-11-05", "2026-11-06"];
+    const away = { 6: ["2026-10-27", "2026-11-07"], 11: ["2026-11-02", "2026-11-04"] };   // Urlaub (Lena) und krank (Tobias)
+    const isAway = (id, d) => away[id] && d >= away[id][0] && d <= away[id][1];
+    const usbOf = { 1: "SN-1043-JW", 2: "SN-2210-MA", 3: "SN-3317-SK", 12: "SN-7781-KR", 13: "SN-1390-JL", 9: "SN-0001-FN" };
+    const L = [], X = [], U = [], Z = [];
+    for (const d of days) for (const p of P) {
+      const [id, , abt, user, karte, pc, raum] = p;
+      if (isAway(id, d)) continue;
+      const h = 7 + Math.floor(rnd() * 2), m = Math.floor(rnd() * 60);
+      Z.push([karte, "Haupteingang", at(d, h, m)]);
+      if (rnd() < 0.6) Z.push([karte, raum, at(d, h, Math.min(59, m + 3))]);
+      if (rnd() < 0.08) L.push([user, pc, at(d, h, Math.min(59, m + 4)), 0]);
+      L.push([user, pc, at(d, h, Math.min(59, m + 5)), 1]);
+      if (rnd() < 0.5) Z.push([karte, "Kantine", at(d, 12, Math.floor(rnd() * 50))]);
+      if ((abt === "Vertrieb" || abt === "Buchhaltung") && rnd() < 0.45) {
+        const name = pick(["angebote", "kunden_calw", "offene_posten", "lieferanten", "kunden_nagold", "mahnungen", "umsatz_q3"]);
+        X.push([user, pc, at(d, 9 + Math.floor(rnd() * 7), Math.floor(rnd() * 60)), `${name}_${d.slice(5).replace("-", "")}.csv`, 20 + Math.floor(rnd() * 380)]);
+      }
+      if (usbOf[id] && rnd() < 0.3) {
+        const h2 = 10 + Math.floor(rnd() * 6), m2 = Math.floor(rnd() * 50);
+        U.push([pc, usbOf[id], at(d, h2, m2), "eingesteckt"], [pc, usbOf[id], at(d, h2, m2 + 5 + Math.floor(rnd() * 4)), "ausgeworfen"]);
+      }
+    }
+    // Die Tatnacht (Freitag, 30.10.)
+    Z.push(["K-150", "Haupteingang", "2026-10-30 21:52"], ["K-150", "Lager", "2026-10-30 21:58"],
+           ["K-135", "Haupteingang", "2026-10-30 22:51"], ["K-135", "Vertrieb", "2026-10-30 22:55"], ["K-135", "Haupteingang", "2026-10-30 23:31"]);
+    L.push(["lschmidt", "PC-305", "2026-10-30 23:08", 0], ["lschmidt", "PC-305", "2026-10-30 23:09", 0], ["lschmidt", "PC-305", "2026-10-30 23:10", 1]);
+    X.push(["lschmidt", "PC-305", "2026-10-30 23:14", "kunden_export_2026-10.csv", 4812]);
+    U.push(["PC-305", "SN-7781-KR", "2026-10-30 23:16", "eingesteckt"], ["PC-305", "SN-7781-KR", "2026-10-30 23:19", "ausgeworfen"]);
+    const byTime = (i) => (a, b) => (a[i] < b[i] ? -1 : a[i] > b[i] ? 1 : 0);
+    L.sort(byTime(2)); X.sort(byTime(2)); U.sort(byTime(2)); Z.sort(byTime(2));
+    const rows = (arr) => arr.map((r) => `(${r.map((v) => (typeof v === "number" ? v : q(v))).join(", ")})`).join(",\n ");
+    return `
+CREATE TABLE meldungen (id INTEGER PRIMARY KEY, zeit TEXT, von TEXT, text TEXT);
+INSERT INTO meldungen VALUES
+ (1, '2026-11-03 10:20', 'Datenschutzbeauftragte Dr. Haas', 'Im Forum „leakbase“ wird die Datei kunden_export_2026-10.csv mit 4812 Kundendatensätzen angeboten. Die Spaltennamen stammen eindeutig aus unserem CRM. Wer hat diese Daten exportiert? Wir müssen den Vorfall binnen 72 Stunden melden.'),
+ (2, '2026-11-03 10:45', 'Ayşe Kaya (IT-Leitung)', 'Das CRM protokolliert jeden Export in crm_exporte. Für Logins, USB-Geräte und den Kartenleser gibt es eigene Tabellen. Wenn du den Täter hast: INSERT INTO loesung (name) VALUES (''Vorname Nachname'');');
+CREATE TABLE mitarbeiter (id INTEGER PRIMARY KEY, name TEXT, abteilung TEXT, benutzer TEXT, karte TEXT);
+INSERT INTO mitarbeiter VALUES
+ ${rows(P.map((p) => p.slice(0, 5)))};
+CREATE TABLE arbeitsplaetze (rechner TEXT PRIMARY KEY, raum TEXT, mitarbeiter_id INTEGER);
+INSERT INTO arbeitsplaetze VALUES
+ ${rows(P.map((p) => [p[5], p[6], p[0]]))};
+CREATE TABLE abwesenheiten (mitarbeiter_id INTEGER, von TEXT, bis TEXT, art TEXT);
+INSERT INTO abwesenheiten VALUES (6, '2026-10-27', '2026-11-07', 'Urlaub'), (11, '2026-11-02', '2026-11-04', 'krank'), (4, '2026-11-09', '2026-11-13', 'Urlaub');
+CREATE TABLE logins (id INTEGER PRIMARY KEY, benutzer TEXT, rechner TEXT, zeit TEXT, erfolgreich INTEGER);
+INSERT INTO logins (benutzer, rechner, zeit, erfolgreich) VALUES
+ ${rows(L)};
+CREATE TABLE crm_exporte (id INTEGER PRIMARY KEY, benutzer TEXT, rechner TEXT, zeit TEXT, datei TEXT, zeilen INTEGER);
+INSERT INTO crm_exporte (benutzer, rechner, zeit, datei, zeilen) VALUES
+ ${rows(X)};
+CREATE TABLE usb_ereignisse (id INTEGER PRIMARY KEY, rechner TEXT, seriennr TEXT, zeit TEXT, aktion TEXT);
+INSERT INTO usb_ereignisse (rechner, seriennr, zeit, aktion) VALUES
+ ${rows(U)};
+CREATE TABLE usb_inventar (seriennr TEXT PRIMARY KEY, mitarbeiter_id INTEGER, beschreibung TEXT);
+INSERT INTO usb_inventar VALUES
+ ${rows(Object.entries(usbOf).map(([id, sn]) => [sn, Number(id), "USB-Stick 64 GB (dienstlich)"]))};
+CREATE TABLE zutritte (id INTEGER PRIMARY KEY, karte TEXT, raum TEXT, zeit TEXT);
+INSERT INTO zutritte (karte, raum, zeit) VALUES
+ ${rows(Z)};
+CREATE TABLE loesung (name TEXT);
+`;
+  },
+};
+
 /* ---------- Fall 1: Der verschwundene Laptop (Nordlicht Logistik GmbH) ---------- */
 window.SQL_DBS.krimi1 = {
   title: "Fall 1 · Nordlicht Logistik",
