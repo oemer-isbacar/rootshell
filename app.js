@@ -257,6 +257,13 @@ async function sqlRun(q = $("#sql-input").value) {
     text = "ERROR: " + e.message;   // zählt in der Prüfung als Fehlerzeile
   }
   onCommandFinished(q, text);
+  // Offene Fälle: nach INSERT INTO loesung klar sagen, ob der Name stimmt (die Prüfung selbst ist ein Hash)
+  const solveIdx = lesson?.steps.findIndex((s) => s.testSolution);
+  if (lesson && solveIdx >= 0 && /insert\s+into\s+loesung/i.test(q) && !text.startsWith("ERROR")) {
+    out.insertAdjacentHTML("beforeend", doneSet(lesson.id).has(solveIdx)
+      ? `<p class="sql-msg ok">🎉 Richtig – Fall gelöst! Die Auflösung steht rechts in der Lektion.</p>`
+      : `<p class="sql-msg err">❌ Das ist nicht der Täter. Prüfe deine Spuren noch einmal – die Tipps rechts helfen.</p>`);
+  }
 }
 $("#sql-go").addEventListener("click", () => sqlRun());
 $("#sql-input").addEventListener("keydown", (e) => {

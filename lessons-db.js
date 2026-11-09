@@ -2,6 +2,9 @@
  * Lernpfad: ① SQL im Browser (folgt) → ② Üben in der Übungs-VM → ③ MariaDB auf der Server-VM (v8-db) → ④ Störfälle (folgen).
  * Übungen (vm: "uebung") laufen in der Wegwerf-VM; prep wird nach dem Zurücksetzen auf „basis“ als root ausgeführt.
  */
+/* Prüfsumme für offene Fälle: Der Name des Täters steht so nicht im Klartext im Code */
+function fallHash(s) { let x = 5381; for (const c of String(s).trim().toLowerCase()) x = ((x * 33) ^ c.codePointAt(0)) >>> 0; return x.toString(36); }
+
 window.LESSONS.push(
 /* ---------- ① Lernen: SQL-Krimi Fall 1 (SQL-Konsole im Browser, Datenbank krimi1 aus sql-cases.js) ---------- */
 {
@@ -98,7 +101,45 @@ window.LESSONS.push(
       explain: `<b>Fall gelöst!</b> Tobias Bauer (Vertrieb) hat die verlorene Karte K-117 in der Kantine gefunden, sein Laptop-Antrag war abgelehnt worden – und mit der fremden Karte holte er sich das Gerät aus dem Serverraum.
         <br><b>Was die IT daraus lernt:</b> verlorene Karten sofort sperren, Zutritte zum Serverraum regelmäßig auswerten, Admin-Geräte verschlüsseln.` },
   ],
-  outro: `Du kannst jetzt <code>SELECT</code>, <code>WHERE</code>, <code>AND</code>, <code>ORDER BY</code>, <code>JOIN</code>, <code>GROUP BY</code>, <code>LIKE</code>, <code>BETWEEN</code> und Unterabfragen. Als Nächstes übst du das an einem <b>echten MariaDB-Server</b> in der Übungs-VM.`,
+  outro: `Du kannst jetzt <code>SELECT</code>, <code>WHERE</code>, <code>AND</code>, <code>ORDER BY</code>, <code>JOIN</code>, <code>GROUP BY</code>, <code>LIKE</code>, <code>BETWEEN</code> und Unterabfragen. Bereit für einen Fall <b>ohne Anleitung</b>? Dann weiter mit Fall 2.`,
+},
+
+/* ---------- ① Lernen: SQL-Krimi Fall 2 – offen ermitteln (Datenbank krimi2) ---------- */
+{
+  id: "db1-krimi-c", mode: "sql", db: "krimi2", group: "db", topic: "db", stage: 1, title: "SQL-Krimi · Fall 2: Das Datenleck (offen)",
+  intro: `Drei Wochen später, wieder bei Nordlicht Logistik: <b>Kundendaten sind im Netz aufgetaucht.</b> Diesmal gibt es keine Anleitung – nur eine größere Datenbank mit zwei Wochen Firmenalltag
+    (Logins, CRM-Exporte, USB-Sticks, Kartenleser, Abwesenheiten) und ein paar Zwischenziele. Wie du ermittelst, entscheidest du selbst.
+    Tipps gibt es gestuft, wenn du festhängst. Ein guter Start: Klick links auf die Tabellen und schau, was drinsteht.`,
+  steps: [
+    { title: "Lies die Meldungen", task: `Was ist passiert, und wie meldest du am Ende den Täter?`,
+      hint: `Wie in Fall 1: alle Zeilen der Tabelle <code>meldungen</code>.`,
+      solution: `SELECT * FROM meldungen;`, check: { cmd: /from\s+meldungen/i, out: /leakbase/ },
+      explain: `Gesucht ist, wer die Datei <code>kunden_export_2026-10.csv</code> exportiert hat. Das CRM protokolliert jeden Export.` },
+    { title: "Zwischenziel: Woher stammt die Datei?",
+      task: `Finde den Export, aus dem die Datei stammt: Wer, wann, an welchem Rechner, wie viele Zeilen?`,
+      hint: `<ol><li>Die Exporte stehen in <code>crm_exporte</code>.</li><li>Filtere nach dem Dateinamen aus der Meldung – oder sortiere nach der Zahl der Zeilen.</li></ol>`,
+      solution: `SELECT * FROM crm_exporte WHERE datei = 'kunden_export_2026-10.csv';`,
+      check: { cmd: /crm_exporte/i, out: /kunden_export_2026-10\.csv/ },
+      explain: `Freitag, 30.10., 23:14 Uhr, Benutzer <b>lschmidt</b> am Rechner <b>PC-305</b> – 4812 Zeilen. Alle anderen Exporte haben ein paar Hundert Zeilen und laufen tagsüber.` },
+    { title: "Zwischenziel: War es wirklich lschmidt?",
+      task: `Prüfe, wem das Konto <code>lschmidt</code> gehört und ob diese Person am 30.10. überhaupt im Haus sein konnte.`,
+      hint: `<ol><li>Den Namen zum Benutzer findest du in <code>mitarbeiter</code>.</li><li>Urlaub und Krankheit stehen in <code>abwesenheiten</code> – verbinde beides per <code>JOIN</code> oder Unterabfrage.</li></ol>`,
+      solution: `SELECT m.name, a.von, a.bis, a.art FROM abwesenheiten a JOIN mitarbeiter m ON m.id = a.mitarbeiter_id WHERE m.benutzer = 'lschmidt';`,
+      check: { cmd: /abwesenheiten/i, out: /2026-10-27/ },
+      explain: `Lena Schmidt war vom 27.10. bis 07.11. <b>im Urlaub</b>. Jemand anderes hat ihr Konto benutzt. Wer saß in der Nacht an PC-305?` },
+    { title: "Löse den Fall",
+      task: `Finde heraus, wer den Export wirklich gemacht hat, und trage den Namen ein:<br><code>INSERT INTO loesung (name) VALUES ('Vorname Nachname');</code><br>
+        Ist der Name falsch, passiert nichts – ermittle weiter.`,
+      hint: `<ol><li>Es gibt mehrere Wege. Schau dir alles an, was in der Nacht vom 30.10. nach 22 Uhr passiert ist – in <code>logins</code>, <code>zutritte</code> und <code>usb_ereignisse</code>.</li>
+        <li>Fehlgeschlagene Logins (<code>erfolgreich = 0</code>) kurz vor dem Export verraten: Hier hat jemand das Passwort probiert.</li>
+        <li>Wurde während des Exports ein USB-Stick eingesteckt? Wem der gehört, steht in <code>usb_inventar</code>. Und wessen Karte öffnete in der Nacht die Tür zum Vertrieb?</li></ol>`,
+      testSolution: `INSERT INTO loesung (name) VALUES ('Kai Richter');`,
+      check: (cmd) => { const m = cmd.match(/insert\s+into\s+loesung[^']*'([^']+)'/i); return !!m && fallHash(m[1]) === "1szgwxh"; },
+      explain: `<b>Fall gelöst: Kai Richter (Vertrieb).</b> Er kam um 22:51 ins Haus, öffnete um 22:55 den Vertrieb, probierte an Lenas Rechner zweimal ihr Passwort und war beim dritten Versuch drin.
+        Um 23:14 exportierte er 4812 Kunden und zog sie um 23:16 auf seinen dienstlichen USB-Stick <code>SN-7781-KR</code>.
+        <br><b>Was die IT daraus lernt:</b> Konten während des Urlaubs sperren, nach Fehlversuchen sperren, große Exporte melden, USB-Sticks nur verschlüsselt und protokolliert.` },
+  ],
+  outro: `Das war echte Ermittlungsarbeit mit SQL – genau so werten Admins bei einem Sicherheitsvorfall Logs aus. Weiter geht es mit echtem MariaDB in der Übungs-VM.`,
 },
 
 /* ---------- ② Üben: echtes MariaDB in der Übungs-VM ---------- */
@@ -234,5 +275,187 @@ EOF`, check: { cmd: /sites-available\/wordpress/ } },
       explain: `Zu einer vollständigen WordPress-Sicherung gehört auch <code>/var/www/wordpress/wp-content</code> (Bilder, Plugins, Themes): <code>sudo tar czf ~/wp-content-$(date +%F).tgz -C /var/www/wordpress wp-content</code>.` },
   ],
   outro: `Du hast den ganzen Weg gemacht: SQL im Krimi gelernt, an einer Übungsdatenbank geübt und jetzt an einer echten Anwendung angewendet. Bereit für ④? Die Datenbank-Störfälle warten im Tab 🎯 Missionen.`,
+},
+
+/* ---------- ③ Anwenden: Gitea mit eigener MariaDB im Container (Ports 3010/2223, neben der SQLite-Gitea aus Teil 3) ---------- */
+{
+  id: "db3-gitea-mariadb", mode: "ssh", vm: "server", group: "db", topic: "db", stage: 3, title: "Gitea mit MariaDB-Container",
+  intro: `In Teil 3 läuft Gitea mit <b>SQLite</b> – eine Datei, kein Datenbankserver. Für ein Team oder viele Repositories nimmt man einen echten Datenbankserver. Heute läuft der meist
+    <b>als eigener Container neben der Anwendung</b>: Beide stehen in einer Compose-Datei, die Anwendung findet die Datenbank über den Dienstnamen. Diese Gitea bekommt eigene Ports (3010 und 2223),
+    damit sie der aus Teil 3 nicht in die Quere kommt.`,
+  steps: [
+    { title: "Docker installieren",
+      text: `Falls du die Docker-Lektion schon gemacht hast, ist alles da. Wir rufen Docker hier mit <code>sudo</code> auf – so funktioniert es auch ohne Mitgliedschaft in der Gruppe <code>docker</code>.`,
+      cmd: "sudo apt install -y docker.io docker-compose-v2 && sudo docker --version && sudo docker compose version",
+      check: { cmd: /apt(-get)?\s+install\s.*docker/, out: /Docker Compose version/ } },
+    { title: "Compose-Datei mit zwei Diensten",
+      text: `<b>db</b> ist MariaDB, <b>gitea</b> die Anwendung. Achte auf drei Dinge: Gitea erreicht die Datenbank unter dem Namen <code>db</code> (Compose legt dafür ein eigenes Netz an),
+        die Zugangsdaten stehen auf beiden Seiten gleich, und <code>depends_on … service_healthy</code> startet Gitea erst, wenn MariaDB wirklich bereit ist.
+        <code>INSTALL_LOCK=true</code> überspringt den Installationsassistenten.`,
+      cmd: `mkdir -p ~/selfhost/gitea-db && cd ~/selfhost/gitea-db && cat > compose.yaml << 'EOF'
+services:
+  db:
+    image: mariadb:11
+    container_name: gitea-mariadb
+    environment:
+      MARIADB_ROOT_PASSWORD: Root_2026_geheim
+      MARIADB_DATABASE: gitea
+      MARIADB_USER: gitea
+      MARIADB_PASSWORD: Gitea_2026_geheim
+    volumes:
+      - ./mariadb:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      retries: 30
+    restart: unless-stopped
+
+  gitea:
+    image: gitea/gitea:1.22
+    container_name: gitea-db
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+      - GITEA__database__DB_TYPE=mysql
+      - GITEA__database__HOST=db:3306
+      - GITEA__database__NAME=gitea
+      - GITEA__database__USER=gitea
+      - GITEA__database__PASSWD=Gitea_2026_geheim
+      - GITEA__security__INSTALL_LOCK=true
+      - GITEA__server__ROOT_URL=http://{{IP}}:3010/
+    ports:
+      - "3010:3000"
+      - "2223:22"
+    volumes:
+      - ./gitea:/data
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+EOF`, check: { cmd: /gitea-db.*compose\.yaml|compose\.yaml/ },
+      explain: `Passwörter direkt in der Compose-Datei sind fürs Lab in Ordnung. Auf echten Servern gehören sie in eine <code>.env</code>-Datei (nicht ins Git!) oder in Docker-Secrets.` },
+    { title: "Starten – und warten, bis alles bereit ist",
+      text: `<code>--wait</code> wartet auf den Healthcheck der Datenbank. Danach fragen wir Gitea selbst, bis es antwortet. Beim ersten Mal werden die Images geladen (1–2 Minuten).`,
+      cmd: `cd ~/selfhost/gitea-db && sudo docker compose up -d --wait && for i in $(seq 60); do curl -sf http://localhost:3010/api/healthz >/dev/null && break; sleep 2; done; sudo docker compose ps`,
+      check: { cmd: /compose\s+up/, out: /healthy/ } },
+    { title: "Hat Gitea seine Tabellen angelegt?",
+      text: `Beim ersten Start legt Gitea alle Tabellen selbst in MariaDB an. Mit <code>docker exec</code> führst du einen Befehl <b>im</b> Datenbank-Container aus:`,
+      cmd: `sudo docker exec gitea-mariadb mariadb -u gitea -pGitea_2026_geheim gitea -e "SHOW TABLES;" | grep -E "^(user|repository|issue)$"`,
+      check: { cmd: /docker\s+exec/, out: /repository/ },
+      explain: `Gitea hat über 100 Tabellen angelegt. Die Datenbank liegt im Ordner <code>~/selfhost/gitea-db/mariadb</code> – ein Bind-Mount, also auch nach einem <code>docker compose down</code> noch da.` },
+    { title: "Admin-Konto per Kommandozeile",
+      text: `Ohne Installationsassistent legst du den ersten Admin mit der Gitea-CLI im Container an (als Benutzer <code>git</code>, unter dem Gitea dort läuft):`,
+      cmd: `sudo docker exec -u git gitea-db gitea admin user create --admin --username azubi --password 'Azubi_2026_sicher' --email azubi@lab.local --must-change-password=false`,
+      check: { cmd: /admin\s+user\s+create/, out: /created|already exists/i } },
+    { title: "Repository über die API anlegen",
+      text: `Fast alles in Gitea geht auch per <b>REST-API</b> – so automatisiert man Einrichtungen per Skript:`,
+      cmd: `curl -s -u azubi:Azubi_2026_sicher -X POST -H "Content-Type: application/json" -d '{"name":"homelab","description":"Meine Server-Konfiguration"}' http://localhost:3010/api/v1/user/repos | grep -o '"full_name":"[^"]*"'`,
+      check: { cmd: /api\/v1\/user\/repos/, out: /azubi\/homelab/ },
+      explain: `Öffne <a href="http://{{IP}}:3010/azubi/homelab" target="_blank">http://{{IP}}:3010/azubi/homelab</a> – dein Repo ist da. Anmelden mit <code>azubi</code> / <code>Azubi_2026_sicher</code>.` },
+    { title: "SQL: Wer ist angelegt?",
+      text: `Die Tabelle heißt <code>user</code> – ein Wort, das in SQL auch eine Bedeutung hat. Deshalb steht sie in <b>Backticks</b>. Die SQL-Anweisung steht in einfachen Anführungszeichen, sonst würde die Shell die Backticks als Befehl ausführen.`,
+      cmd: `sudo docker exec gitea-mariadb mariadb -u gitea -pGitea_2026_geheim gitea -e 'SELECT id, name, email, is_admin FROM \`user\`;'`,
+      check: { cmd: /from\s+`user`/i, out: /azubi/ } },
+    { title: "SQL: Repositories mit Besitzer (JOIN)",
+      cmd: `sudo docker exec gitea-mariadb mariadb -u gitea -pGitea_2026_geheim gitea -e 'SELECT r.name AS repo, u.name AS besitzer, r.is_private FROM repository r JOIN \`user\` u ON u.id = r.owner_id;'`,
+      check: { cmd: /join/i, out: /homelab/ },
+      explain: `Solche Abfragen helfen bei Auswertungen („Welche Repos sind öffentlich?“). Ändern solltest du in der Datenbank einer laufenden Anwendung aber nur, was du genau verstehst – die Weboberfläche und die API prüfen Regeln, die SQL einfach umgeht.` },
+    { title: "Sicherung aus dem Container heraus",
+      text: `<code>mariadb-dump</code> läuft im Container, die Ausgabe landet über die Pipe auf dem Host:`,
+      cmd: "sudo docker exec gitea-mariadb mariadb-dump -u root -pRoot_2026_geheim gitea | gzip > ~/gitea-db-$(date +%F).sql.gz && ls -lh ~/gitea-db-*.sql.gz",
+      check: { cmd: /mariadb-dump|mysqldump/, out: /gitea-db-.*\.sql\.gz/ },
+      explain: `Zur vollständigen Gitea-Sicherung gehört auch <code>~/selfhost/gitea-db/gitea</code> (die Git-Repositories selbst). Gitea bringt dafür <code>gitea dump</code> mit.
+        <br><b>Umzug von SQLite:</b> <code>gitea dump --database mysql</code> erzeugt die Daten einer SQLite-Installation als SQL für MariaDB/MySQL – einspielen, <code>app.ini</code> auf <code>mysql</code> umstellen, fertig.` },
+  ],
+  outro: `Das ist das Muster fast aller modernen Selbst-Hosting-Dienste (Nextcloud, Paperless, Bookstack …): Anwendung und Datenbank als Container, verbunden über den Dienstnamen, Daten in Volumes – und Sicherungen per <code>docker exec … dump</code>.`,
+},
+
+/* ---------- ③ Anwenden: Nextcloud mit MariaDB (Container, Port 8090) ---------- */
+{
+  id: "db3-nextcloud", mode: "ssh", vm: "server", group: "db", topic: "db", stage: 3, title: "Nextcloud mit MariaDB betreiben",
+  intro: `<b>Nextcloud</b> ist die eigene Cloud für Dateien, Kalender und Kontakte – einer der beliebtesten Dienste im Homelab und in kleinen Firmen. Du richtest sie mit MariaDB als Container ein
+    und erledigst dann, was Admins im Alltag wirklich tun: Benutzer mit <code>occ</code> anlegen, Hintergrundjobs per Cron, in die Datenbank schauen und sauber sichern.
+    Nextcloud braucht etwas mehr Arbeitsspeicher – andere Container vorher ruhig stoppen.`,
+  steps: [
+    { title: "Docker bereitstellen",
+      cmd: "sudo apt install -y docker.io docker-compose-v2 && sudo docker compose version",
+      check: { cmd: /apt(-get)?\s+install\s.*docker/, out: /Docker Compose version/ } },
+    { title: "Compose-Datei: Nextcloud und MariaDB",
+      text: `Zwei Besonderheiten für Nextcloud: MariaDB läuft mit <code>READ-COMMITTED</code> und Binärlog im Zeilenformat (so empfiehlt es Nextcloud), und die Variablen <code>NEXTCLOUD_ADMIN_*</code>
+        lassen die Installation beim ersten Start automatisch durchlaufen. <code>NEXTCLOUD_TRUSTED_DOMAINS</code> legt fest, unter welchen Adressen Nextcloud sich aufrufen lässt.`,
+      cmd: `mkdir -p ~/selfhost/nextcloud && cd ~/selfhost/nextcloud && cat > compose.yaml << 'EOF'
+services:
+  db:
+    image: mariadb:11
+    container_name: nc-mariadb
+    command: --transaction-isolation=READ-COMMITTED --log-bin=binlog --binlog-format=ROW
+    environment:
+      MARIADB_ROOT_PASSWORD: Root_2026_geheim
+      MARIADB_DATABASE: nextcloud
+      MARIADB_USER: nextcloud
+      MARIADB_PASSWORD: Nc_2026_geheim
+    volumes:
+      - ./mariadb:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      retries: 30
+    restart: unless-stopped
+
+  app:
+    image: nextcloud:30-apache
+    container_name: nc-app
+    ports:
+      - "8090:80"
+    environment:
+      MYSQL_HOST: db
+      MYSQL_DATABASE: nextcloud
+      MYSQL_USER: nextcloud
+      MYSQL_PASSWORD: Nc_2026_geheim
+      NEXTCLOUD_ADMIN_USER: admin
+      NEXTCLOUD_ADMIN_PASSWORD: Admin_2026_sicher
+      NEXTCLOUD_TRUSTED_DOMAINS: localhost {{IP}}
+    volumes:
+      - ./html:/var/www/html
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+EOF`, check: { cmd: /compose\.yaml/ } },
+    { title: "Starten und Installation abwarten",
+      text: `Beim ersten Start lädt Docker die Images und Nextcloud installiert sich selbst in die Datenbank – das dauert ein paar Minuten. <code>occ status</code> verrät, wann es fertig ist.
+        <code>occ</code> ist das Kommandozeilen-Werkzeug von Nextcloud; es läuft immer als Benutzer <code>www-data</code>.`,
+      cmd: `cd ~/selfhost/nextcloud && sudo docker compose up -d --wait && for i in $(seq 120); do curl -s http://localhost:8090/status.php | grep -q '"installed":true' && break; sleep 3; done; sudo docker exec -u www-data nc-app php occ status`,
+      check: { cmd: /compose\s+up/, out: /installed: true/ } },
+    { title: "Benutzer mit occ anlegen",
+      text: `Statt sich durch die Weboberfläche zu klicken, legen Admins Benutzer per <code>occ</code> an – das lässt sich auch für viele Benutzer skripten. Das Passwort kommt aus einer Umgebungsvariable, damit es nicht in der Prozessliste steht.`,
+      cmd: `sudo docker exec -u www-data -e OC_PASS='Lisa_2026_sicher' nc-app php occ user:add --password-from-env --display-name "Lisa Berger" lisa`,
+      check: { cmd: /occ\s+user:add/, out: /created successfully|already exists/i } },
+    { title: "Eine Datei per WebDAV hochladen",
+      text: `Die Nextcloud-Apps und Netzlaufwerke sprechen <b>WebDAV</b> – ein HTTP-Protokoll für Dateien. <code>curl -T</code> lädt eine Datei hoch, <b>201</b> heißt „angelegt“.`,
+      cmd: `echo "Hallo aus rootshell" > /tmp/notiz.txt && curl -s -u lisa:Lisa_2026_sicher -T /tmp/notiz.txt -o /dev/null -w "%{http_code}\\n" http://localhost:8090/remote.php/dav/files/lisa/notiz.txt`,
+      check: { cmd: /remote\.php\/dav/, out: /\b20[14]\b/ },
+      explain: `Im Windows-Browser: <a href="http://{{IP}}:8090/" target="_blank">http://{{IP}}:8090/</a>, anmelden als <code>lisa</code> / <code>Lisa_2026_sicher</code> – die <code>notiz.txt</code> ist da.` },
+    { title: "SQL: Wer hat ein Konto?",
+      text: `Alle Nextcloud-Tabellen beginnen mit <code>oc_</code>.`,
+      cmd: `sudo docker exec nc-mariadb mariadb -u nextcloud -pNc_2026_geheim nextcloud -e "SELECT uid, displayname FROM oc_users;"`,
+      check: { cmd: /oc_users/, out: /lisa/ } },
+    { title: "SQL: Wo steht die Datei? (JOIN)",
+      text: `Die Datei selbst liegt im Dateisystem – die Datenbank kennt nur ihre <b>Metadaten</b>: Pfad, Größe, Speicher. Jeder Benutzer hat einen eigenen Speicher (<code>home::lisa</code>).`,
+      cmd: `sudo docker exec nc-mariadb mariadb -u nextcloud -pNc_2026_geheim nextcloud -e "SELECT s.id AS speicher, f.path, f.size FROM oc_filecache f JOIN oc_storages s ON s.numeric_id = f.storage WHERE f.name = 'notiz.txt';"`,
+      check: { cmd: /join/i, out: /home::lisa/ },
+      explain: `Darum gilt: Dateien <b>nie</b> direkt in den Datenordner kopieren – die Datenbank wüsste nichts davon. Wer es doch tut, muss mit <code>occ files:scan --all</code> neu einlesen.` },
+    { title: "Hintergrundjobs per Cron",
+      text: `Nextcloud räumt regelmäßig auf (Papierkorb, Versionen, Vorschaubilder). Zuverlässig geht das nur per <b>Cron</b>: alle 5 Minuten <code>cron.php</code> ausführen.`,
+      cmd: [`sudo docker exec -u www-data nc-app php occ background:cron`,
+            `( sudo crontab -l 2>/dev/null | grep -v nc-app; echo "*/5 * * * * docker exec -u www-data nc-app php -f /var/www/html/cron.php" ) | sudo crontab - && sudo crontab -l | tail -1`],
+      check: { cmd: /crontab/, out: /cron\.php/ } },
+    { title: "Sauber sichern: Wartungsmodus und Dump",
+      text: `Während der Sicherung soll niemand Dateien ändern. Der <b>Wartungsmodus</b> sperrt Nextcloud kurz für Benutzer, <code>--single-transaction</code> sichert die Datenbank in einem konsistenten Zustand.`,
+      cmd: `sudo docker exec -u www-data nc-app php occ maintenance:mode --on && sudo docker exec nc-mariadb mariadb-dump --single-transaction -u root -pRoot_2026_geheim nextcloud | gzip > ~/nextcloud-db-$(date +%F).sql.gz; sudo docker exec -u www-data nc-app php occ maintenance:mode --off && ls -lh ~/nextcloud-db-*.sql.gz`,
+      check: { cmd: /maintenance:mode/, out: /nextcloud-db-.*\.sql\.gz/ },
+      explain: `Zu einer vollständigen Sicherung gehören außerdem der Ordner <code>~/selfhost/nextcloud/html/data</code> (die Dateien) und <code>config/config.php</code>. Wiederherstellen in umgekehrter Reihenfolge – und danach <code>occ maintenance:data-fingerprint</code>, damit die Apps neu synchronisieren.` },
+  ],
+  outro: `Damit hast du die drei typischen Wege kennengelernt, wie Anwendungen ihre Datenbank nutzen: WordPress auf einem klassischen LEMP-Server, Gitea und Nextcloud mit eigener MariaDB im Container. Die Werkzeuge sind überall dieselben: SQL, Dump, Rechte.`,
 },
 );
