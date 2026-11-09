@@ -30,7 +30,7 @@ SQL
 `;
 const MISSIONS = [
 {
-  id: "m-disk", level: 1, title: "Die Platte läuft voll",
+  id: "m-disk", topic: "linux", level: 1, title: "Die Platte läuft voll",
   story: `Montagmorgen, das Monitoring schlägt Alarm: <i>„Speicherplatz auf fis-lab knapp!“</i> Irgendein Prozess hat über das Wochenende eine riesige Datei abgelegt.`,
   goal: `Finde die große Datei (über 1 GB), die nicht dahin gehört, und lösche sie.`,
   hints: [`Mit <code>df -h</code> siehst du, wie voll die Platte ist.`,
@@ -42,7 +42,7 @@ const MISSIONS = [
   verify: `if [ -e /var/lib/.sysdata/core.dump.0 ]; then echo "❌ Die große Datei ist noch da. ($(df -h / | awk 'NR==2{print $5}') belegt)"; exit 1; fi; echo "✅ Platz geschaffen – $(df -h / | awk 'NR==2{print $5}') belegt."`,
 },
 {
-  id: "m-cpu", level: 1, title: "Wer frisst die CPU?",
+  id: "m-cpu", topic: "linux", level: 1, title: "Wer frisst die CPU?",
   story: `Kollegen beschweren sich, dass der Server „total langsam“ ist. Ein unbekannter Prozess zieht dauerhaft CPU – und taucht nach einem Neustart wieder auf.`,
   goal: `Finde den Prozess, stoppe ihn <b>und</b> sorge dafür, dass er nach einem Neustart nicht wiederkommt.`,
   hints: [`<code>top</code> oder <code>htop</code> – sortiert nach CPU. Merk dir die PID.`,
@@ -66,7 +66,7 @@ systemctl daemon-reload && systemctl enable --now netsync >/dev/null 2>&1 && ech
 echo "✅ Gestoppt und aus dem Autostart entfernt."`,
 },
 {
-  id: "m-hosts", level: 1, title: "Falsche Adresse",
+  id: "m-hosts", topic: "linux", level: 1, title: "Falsche Adresse",
   story: `Das neue Wiki soll intern unter <code>wiki.lab</code> erreichbar sein und läuft auf diesem Server selbst. Aber <code>ping wiki.lab</code> geht ins Leere …`,
   goal: `Sorge dafür, dass <code>wiki.lab</code> auf diesem Server zu <code>127.0.0.1</code> aufgelöst wird.`,
   hints: [`<code>getent hosts wiki.lab</code> zeigt, wohin der Name gerade aufgelöst wird.`,
@@ -78,7 +78,7 @@ echo "✅ Gestoppt und aus dem Autostart entfernt."`,
   verify: `r=$(getent hosts wiki.lab | awk '{print $1}' | head -1); [ "$r" = "127.0.0.1" ] && { echo "✅ wiki.lab → 127.0.0.1"; exit 0; }; echo "❌ wiki.lab wird zu '\${r:-nichts}' aufgelöst."; exit 1`,
 },
 {
-  id: "m-user", level: 2, title: "Neue Kollegin im Vertrieb",
+  id: "m-user", topic: "linux", level: 2, title: "Neue Kollegin im Vertrieb",
   story: `Ticket von der Personalabteilung: <i>„Lisa Berger fängt morgen im Vertrieb an. Bitte Zugang einrichten. Sie soll auch Admin-Rechte bekommen, und der Vertrieb braucht einen gemeinsamen Ordner.“</i>`,
   goal: `<ul><li>Benutzer <code>lisa</code> mit Home-Verzeichnis und Bash als Shell</li><li>Gruppe <code>vertrieb</code>, lisa ist Mitglied</li><li>lisa darf <code>sudo</code></li><li>Ordner <code>/srv/vertrieb</code>: gehört <code>root:vertrieb</code>, Rechte <code>2770</code></li></ul>`,
   hints: [`<code>sudo adduser lisa</code> legt Benutzer samt Home an.`,
@@ -96,7 +96,7 @@ id -nG lisa | grep -qw sudo || { echo "❌ lisa darf noch kein sudo."; f=1; }
 [ $f = 0 ] && echo "✅ Alles eingerichtet – Lisa kann morgen loslegen."; exit $f`,
 },
 {
-  id: "m-nginx", level: 2, title: "Die Webseite ist down",
+  id: "m-nginx", topic: "linux", level: 2, title: "Die Webseite ist down",
   story: `Nach einer „kleinen Änderung“ eines Kollegen an der Webserver-Konfiguration ist die Firmenseite nicht mehr erreichbar. Er ist jetzt im Urlaub.`,
   goal: `Bring nginx wieder zum Laufen, sodass <code>curl http://localhost</code> eine Seite liefert.`,
   hints: [`<code>systemctl status nginx</code> und <code>journalctl -u nginx -n 30</code> – was steht da?`,
@@ -117,7 +117,7 @@ curl -fs -o /dev/null http://localhost || { echo "❌ nginx läuft, aber http://
 echo "✅ Die Seite ist wieder online."`,
 },
 {
-  id: "m-ufw", level: 2, title: "Von außen nicht erreichbar",
+  id: "m-ufw", topic: "sec", level: 2, title: "Von außen nicht erreichbar",
   story: `Auf dem Server selbst funktioniert die Webseite (<code>curl localhost</code> klappt) – aber von deinem Windows-PC aus lädt <code>http://{{IP}}</code> ewig.`,
   goal: `Mach die Webseite von außen erreichbar, <b>ohne</b> die Firewall abzuschalten – SSH muss natürlich auch weiter gehen.`,
   hints: [`Läuft der Webserver? <code>sudo ss -tlnp | grep :80</code>`,
@@ -136,7 +136,7 @@ ufw status | grep -qE "^(80(/tcp)?|Nginx (HTTP|Full)|WWW|http)\\b.*ALLOW" || { e
 echo "✅ Erreichbar – teste im Windows-Browser: http://$(hostname -I | awk '{print $1}')"`,
 },
 {
-  id: "m-cron", level: 2, title: "Der Cronjob tut nichts",
+  id: "m-cron", topic: "linux", level: 2, title: "Der Cronjob tut nichts",
   story: `Jede Minute soll ein Aufräum-Skript laufen und in <code>/var/log/aufraeumen.log</code> protokollieren. Die Logdatei bleibt aber leer. Laut Kollegen „ist alles korrekt eingetragen“.`,
   goal: `Finde heraus, warum der Job nicht läuft, und repariere es, sodass Einträge im Log erscheinen.`,
   hints: [`Wo stehen System-Cronjobs? Schau in <code>/etc/cron.d/</code>.`,
@@ -158,7 +158,7 @@ grep -q OK /var/log/aufraeumen.log 2>/dev/null || { echo "⏳ Skript sieht gut a
 echo "✅ Der Job läuft:"; tail -2 /var/log/aufraeumen.log`,
 },
 {
-  id: "m-ssh", level: 3, title: "SSH-Schlüssel wird abgelehnt",
+  id: "m-ssh", topic: "linux", level: 3, title: "SSH-Schlüssel wird abgelehnt",
   story: `Der Backup-Server meldet sich per SSH-Schlüssel als Benutzer <code>sicherung</code> an. Seit gestern fragt SSH plötzlich nach einem Passwort – der Schlüssel wird ignoriert. Der Schlüssel selbst ist richtig hinterlegt.`,
   goal: `Repariere es so, dass der Schlüssel-Login wieder funktioniert. Test: <code>sudo ssh -i /root/backup_key -o BatchMode=yes sicherung@localhost whoami</code>`,
   hints: [`Was sagt der SSH-Server? <code>sudo journalctl -u ssh -n 20</code> – achte auf „bad ownership or modes“.`,
@@ -177,7 +177,7 @@ echo ok`,
 echo "❌ Login per Schlüssel geht noch nicht: $out"; echo "Rechte: $(stat -c '%n %a %U' /home/sicherung /home/sicherung/.ssh /home/sicherung/.ssh/authorized_keys | tr '\\n' ' ')"; exit 1`,
 },
 {
-  id: "m-502", level: 3, title: "502 Bad Gateway",
+  id: "m-502", topic: "linux", level: 3, title: "502 Bad Gateway",
   story: `Die PHP-Anwendung (LEMP-Stack) zeigt nur noch <b>502 Bad Gateway</b>. nginx läuft, PHP ist installiert. Nach dem letzten PHP-Update ging nichts mehr.`,
   goal: `Bring die Seite <code>http://localhost/status.php</code> wieder zum Laufen – sie soll „PHP läuft“ ausgeben.`,
   hints: [`502 heißt: nginx erreicht das Backend (PHP-FPM) nicht. Was steht in <code>/var/log/nginx/error.log</code>?`,
@@ -206,7 +206,7 @@ echo "$r" | grep -q "PHP läuft" && { echo "✅ $r"; exit 0; }
 echo "❌ Antwort: $(echo "$r" | grep -o '<title>[^<]*' | sed 's/<title>//' | head -1)"; exit 1`,
 },
 {
-  id: "m-docker", level: 3, title: "Nach dem Neustart ist der Dienst weg",
+  id: "m-docker", topic: "devops", level: 3, title: "Nach dem Neustart ist der Dienst weg",
   story: `Der Status-Monitor läuft als Docker-Container <code>status</code>. Nach jedem Neustart des Servers ist er weg und muss von Hand gestartet werden.`,
   goal: `Sorge dafür, dass der Container <code>status</code> automatisch wieder startet (auch nach einem Server-Neustart) – ohne ihn neu zu erstellen.`,
   hints: [`<code>docker ps -a</code> – läuft er gerade?`,
@@ -225,7 +225,7 @@ echo "✅ Richtlinie '$p' gesetzt und Container läuft."`,
  * Das Setup spielt als root eine HARMLOSE Simulation ein (Benutzer, Dienst, Cronjob) – kein echter Schadcode.
  * Du reagierst als Verteidiger in deiner eigenen VM. ---------- */
 {
-  id: "msec-user", level: 2, title: "🛡️ Das fremde Konto",
+  id: "msec-user", topic: "sec", level: 2, title: "🛡️ Das fremde Konto",
   story: `Bei einem Sicherheits-Audit fällt auf der VM ein Benutzerkonto auf, das niemand aus dem Team angelegt hat – und es hat sogar <b>sudo</b>-Rechte. So etwas legen Angreifer gern als Hintertür an.`,
   goal: `Finde das verdächtige Konto und entferne es <b>vollständig</b> (mitsamt Home-Verzeichnis und sudo-Rechten). Das reguläre Konto <code>ubuntu</code> bleibt natürlich bestehen.`,
   hints: [`Normale Benutzer haben eine UID ab 1000: <code>getent passwd | awk -F: '$3>=1000 {print $1, $3}'</code>`,
@@ -242,7 +242,7 @@ if [ -d /home/svc-update ]; then echo "❌ Das Home-Verzeichnis /home/svc-update
 echo "✅ Das eingeschleuste Konto ist vollständig entfernt, 'ubuntu' ist unversehrt."`,
 },
 {
-  id: "msec-port", level: 2, title: "🛡️ Der heimliche Dienst",
+  id: "msec-port", topic: "sec", level: 2, title: "🛡️ Der heimliche Dienst",
   story: `Dein Portscan aus Teil 5 zeigt einen offenen Port <b>4444</b>, den hier niemand kennt. Etwas lauscht da und würde auch nach einem Neustart wiederkommen.`,
   goal: `Finde heraus, welcher Dienst auf dem unerwarteten Port lauscht, stoppe ihn und sorge dafür, dass er beim nächsten Start <b>nicht</b> wiederkommt.`,
   hints: [`Was lauscht auf 4444? <code>sudo ss -tulpn | grep 4444</code> – notiere die PID.`,
@@ -267,7 +267,7 @@ if systemctl is-enabled sys-helper >/dev/null 2>&1; then echo "❌ Der Dienst 's
 echo "✅ Port 4444 ist zu und der heimliche Dienst startet nicht mehr."`,
 },
 {
-  id: "msec-cron", level: 3, title: "🛡️ Der manipulierte Cronjob",
+  id: "msec-cron", topic: "sec", level: 3, title: "🛡️ Der manipulierte Cronjob",
   story: `In den geplanten Aufgaben steckt ein Eintrag, der jede Minute im Hintergrund etwas ausführt und eine versteckte Datei füttert – ein typischer Weg, wie sich Angreifer dauerhaft einnisten.`,
   goal: `Finde den verdächtigen Cronjob, entferne ihn, und beseitige auch die versteckte Datei, die er angelegt hat.`,
   hints: [`System-Cronjobs liegen nicht nur in <code>crontab -l</code>, sondern auch in <code>/etc/cron.d/</code> und <code>/etc/crontab</code>: <code>ls -la /etc/cron.d</code>`,
@@ -285,7 +285,7 @@ if [ -f /tmp/.sys-cache ]; then echo "❌ Die versteckte Datei /tmp/.sys-cache i
 echo "✅ Cronjob und seine versteckte Datei sind entfernt."`,
 },
 {
-  id: "msec-harden", level: 3, title: "🛡️ Server abriegeln",
+  id: "msec-harden", topic: "sec", level: 3, title: "🛡️ Server abriegeln",
   story: `Nach dem Vorfall soll die VM so dicht sein, dass nur noch das Nötigste erreichbar ist. Aktuell steht ein Port offen, der nicht gebraucht wird, und die Root-Anmeldung per SSH ist erlaubt.`,
   goal: `Sorge dafür, dass die Firewall aktiv ist und <b>nur SSH (Port 22)</b> von außen erreichbar bleibt, der unnötige Port <b>8080</b> geschlossen ist und die <b>Root-Anmeldung per SSH verboten</b> ist (<code>PermitRootLogin no</code>). SSH muss erreichbar bleiben.`,
   hints: [`Was ist offen? <code>sudo ufw status</code>. Eine Regel löschst du mit <code>sudo ufw delete allow 8080/tcp</code>.`,
@@ -308,7 +308,7 @@ rl=$(sshd -T 2>/dev/null | awk '/^permitrootlogin/{print $2}')
 echo "✅ Abgeriegelt: Firewall aktiv, nur SSH offen, Root-Login verboten."`,
 },
 {
-  id: "msec-restore", level: 2, title: "🛡️ Ransomware-Alarm",
+  id: "msec-restore", topic: "sec", level: 2, title: "🛡️ Ransomware-Alarm",
   story: `Montagmorgen: Die Firmen-Webseite unter <code>/srv/webseite</code> ist unbrauchbar. Alle Seiten tragen plötzlich die Endung <code>.locked</code>, daneben liegt eine Erpresser-Notiz. (Keine Sorge: Das ist eine harmlose Übung, nichts wurde wirklich verschlüsselt.) Zum Glück gibt es ein nächtliches Backup.`,
   goal: `Stelle die Webseite aus dem Backup unter <code>/var/backups/webseite/</code> wieder her: Die Originaldateien müssen unverändert zurück sein, die <code>.locked</code>-Dateien und die Notiz verschwinden.`,
   hints: [`Was liegt im Backup? <code>tar tzf /var/backups/webseite/*.tar.gz</code>`,
@@ -333,7 +333,7 @@ sha256sum -c --quiet /var/lib/rootshell/webseite.sha256 >/dev/null 2>&1 || { ech
 echo "✅ Webseite aus dem Backup wiederhergestellt – Prüfsummen stimmen."`,
 },
 {
-  id: "msec-log", level: 3, title: "🛡️ Brute-Force im Log",
+  id: "msec-log", topic: "sec", level: 3, title: "🛡️ Brute-Force im Log",
   story: `Das Monitoring meldet eine Flut fehlgeschlagener SSH-Anmeldungen. Irgendwer probiert seit einer Weile Passwörter durch. Die Spuren stehen im Auth-Log.`,
   goal: `Finde die IP-Adresse mit den <b>meisten</b> Fehlversuchen und sperre sie mit <code>ufw</code> für <b>alle</b> Ports. Achtung: Die Sperre muss <b>vor</b> der bestehenden SSH-Freigabe greifen. Legitime Anmeldungen dürfen nicht gesperrt werden.`,
   hints: [`Die Meldungen stehen in <code>/var/log/auth.log</code> (oder <code>sudo journalctl -t sshd</code>). Suche nach <code>Failed password</code>.`,
@@ -360,7 +360,7 @@ echo "✅ Angreifer 203.0.113.55 gesperrt – und zwar vor der SSH-Freigabe."`,
 },
 /* ---------- Netzwerk-Missionen (Teil 6) ---------- */
 {
-  id: "mnet-dns", level: 1, title: "🌐 Falsche Adresse",
+  id: "mnet-dns", topic: "net", level: 1, title: "🌐 Falsche Adresse",
   story: `Ein Kollege beschwert sich: Auf dem Server liefert <code>curl http://example.com</code> nur einen Timeout. Auf seinem Laptop geht die Seite. <code>dig example.com</code> auf dem Server zeigt aber die richtige Adresse … seltsam.`,
   goal: `Finde heraus, warum der Server <code>example.com</code> falsch auflöst, und behebe es, ohne die übrigen Einträge zu beschädigen.`,
   hints: [`Vergleiche: <code>dig +short example.com</code> fragt nur DNS, <code>getent hosts example.com</code> löst auf wie jedes Programm.`,
@@ -376,7 +376,7 @@ if getent hosts example.com | grep -q '203.0.113.80'; then echo "❌ example.com
 echo "✅ example.com wird wieder richtig aufgelöst ($(getent hosts example.com | awk '{print $1; exit}'))."`,
 },
 {
-  id: "mnet-bind", level: 2, title: "🌐 Intranet nur für sich selbst",
+  id: "mnet-bind", topic: "net", level: 2, title: "🌐 Intranet nur für sich selbst",
   story: `Das neue Intranet läuft auf dem Server als Dienst <code>intranet</code>. Auf dem Server selbst klappt <code>curl localhost:8088</code> – aber kein Kollege erreicht <code>http://{{IP}}:8088</code>.`,
   goal: `Sorge dafür, dass das Intranet über die Netzwerkadresse des Servers erreichbar ist – dauerhaft, also auch nach einem Neustart des Dienstes.`,
   hints: [`Auf welcher Adresse lauscht der Dienst? <code>sudo ss -tlnp | grep 8088</code>`,
@@ -407,7 +407,7 @@ grep -q -- '--bind 127.0.0.1' /etc/systemd/system/intranet.service && { echo "�
 echo "✅ Das Intranet ist unter http://$IP:8088 für alle erreichbar."`,
 },
 {
-  id: "mnet-gw", level: 2, title: "🌐 Kein Weg nach draußen",
+  id: "mnet-gw", topic: "net", level: 2, title: "🌐 Kein Weg nach draußen",
   story: `Seit einer Wartung schlagen auf dem Server alle Updates fehl: <code>ping 1.1.1.1</code> bekommt keine Antwort. Das lokale Netz funktioniert, du bist ja per SSH verbunden. Der Netzplan liegt unter <code>/etc/netzplan.txt</code>.`,
   goal: `Finde den Fehler in der Netzwerkkonfiguration und stelle den Weg ins Internet wieder her.`,
   hints: [`Arbeite die Schichten ab: Schnittstelle, Adresse, <b>Gateway</b>, Internet. <code>ip route</code> zeigt, wohin Pakete nach draußen gehen.`,
@@ -437,7 +437,7 @@ echo "✅ Der Weg ins Internet führt wieder über das richtige Gateway ($GW)."`
 },
 /* ---------- Git & Docker (Teil 7) ---------- */
 {
-  id: "mdev-git", level: 2, title: "🌿 Wer hat den Port kaputt gemacht?",
+  id: "mdev-git", topic: "devops", level: 2, title: "🌿 Wer hat den Port kaputt gemacht?",
   story: `Die Webapp in <code>~/webapp</code> startet nicht mehr: Der Port in <code>app.conf</code> ist plötzlich ungültig. Im Team arbeiten mehrere Leute mit Git. Irgendein Commit der letzten Tage war schuld.`,
   goal: `Finde den schuldigen Commit und nimm <b>nur diese</b> Änderung zurück – ohne die Geschichte umzuschreiben (kein <code>reset</code>) und ohne die späteren Änderungen der Kollegen zu verlieren.`,
   hints: [`<code>cd ~/webapp && git log --oneline</code>, dann je Commit <code>git show ID</code> – oder gezielt: <code>git log -p app.conf</code>`,
@@ -477,7 +477,7 @@ G merge-base --is-ancestor "$BAD" HEAD || { echo "❌ Der fehlerhafte Commit feh
 echo "✅ Fehler per revert zurückgenommen – Geschichte und spätere Änderungen sind erhalten."`,
 },
 {
-  id: "mdev-docker", level: 2, title: "🐳 Der Shop antwortet nicht",
+  id: "mdev-docker", topic: "devops", level: 2, title: "🐳 Der Shop antwortet nicht",
   story: `Der Online-Shop läuft als Container <code>shop</code>. <code>docker ps</code> zeigt ihn als „Up“, aber <code>curl localhost:8095</code> liefert nur einen Fehler. (Das Vorbereiten installiert ggf. Docker und lädt ein Image – das kann 1–2 Minuten dauern.)`,
   goal: `Sorge dafür, dass unter <code>http://localhost:8095</code> die Webseite aus dem Container kommt. Der Container soll weiterhin <code>shop</code> heißen und nach einem Neustart des Servers automatisch wieder laufen.`,
   hints: [`<code>sudo docker ps</code> zeigt die Port-Zuordnung als <code>HOST:CONTAINER</code>.`,
@@ -695,7 +695,7 @@ echo "✅ Alle 5 Ordner mit Willkommensdatei angelegt – das Onboarding kann ko
 },
 /* ---------- Skript-Missionen Linux (Bash) – geprüft mit eigenen Testdaten ---------- */
 {
-  id: "msc-backup", level: 2, title: "Skript: Backup mit Rotation",
+  id: "msc-backup", topic: "script", level: 2, title: "Skript: Backup mit Rotation",
   story: `Ein Kunde sichert seinen Projektordner bisher von Hand – wenn er daran denkt. Letzte Woche war die Platte voll, weil sich hunderte alte Sicherungen angesammelt hatten.`,
   goal: `Schreibe <code>~/bin/backup.sh</code>: Es packt <code>~/projekt</code> als <code>~/backups/projekt-JJJJ-MM-TT_HHMMSS.tar.gz</code> und behält danach nur die <b>5 neuesten</b> Archive. Bei Erfolg Exit-Code 0. Das Skript muss auch funktionieren, wenn es aus einem anderen Ordner gestartet wird (z. B. von cron).`,
   hints: [`Datum im Dateinamen: <code>$(date +%F_%H%M%S)</code>. Packen mit <code>tar -czf ZIEL -C "$HOME" projekt</code> – <code>-C</code> wechselt vorher in den Ordner.`,
@@ -740,7 +740,7 @@ for d in 01 02 03; do [ -e "$B/projekt-2026-10-$d"_020000.tar.gz ] && { echo "�
 echo "✅ Backup läuft: neues Archiv $neu, Inhalt stimmt, nur die 5 neuesten bleiben."`,
 },
 {
-  id: "msc-platz", level: 2, title: "Skript: Warnung bei voller Platte",
+  id: "msc-platz", topic: "script", level: 2, title: "Skript: Warnung bei voller Platte",
   story: `Das Monitoring soll Alarm schlagen, bevor eine Platte vollläuft. Es kann eigene Prüfskripte starten und wertet deren <b>Exit-Code</b> aus.`,
   goal: `Schreibe <code>~/bin/platzcheck.sh SCHWELLE</code>. Für jedes echte Dateisystem (ohne <code>tmpfs</code>, <code>squashfs</code>, <code>devtmpfs</code>, <code>efivarfs</code>, <code>overlay</code>), das <b>über</b> der Schwelle in Prozent belegt ist, gibt es die Zeile <code>WARNUNG &lt;Einhängepunkt&gt; &lt;Belegung&gt;%</code> (z. B. <code>WARNUNG / 87%</code>) und am Ende Exit-Code 1. Ist alles gut: <code>OK</code> und Exit-Code 0. Fehlt die Schwelle oder ist sie keine Zahl: Hilfe auf stderr und Exit-Code 2.`,
   hints: [`<code>df --output=target,pcent -x tmpfs -x squashfs -x devtmpfs -x efivarfs -x overlay | tail -n +2</code> liefert Einhängepunkt und Belegung.`,
@@ -783,7 +783,7 @@ run abc
 echo "✅ platzcheck.sh arbeitet korrekt: Warnungen, OK und alle Exit-Codes stimmen."`,
 },
 {
-  id: "msc-toplog", level: 3, title: "Skript: Wer ruft am häufigsten an?",
+  id: "msc-toplog", topic: "script", level: 3, title: "Skript: Wer ruft am häufigsten an?",
   story: `Der Webserver ist seit heute Morgen langsam. Verdacht: Einzelne Adressen fragen ihn mit sehr vielen Anfragen ab. Du brauchst ein Werkzeug, das du auf jedes Access-Log loslassen kannst.`,
   goal: `Schreibe <code>~/bin/toplog.sh LOGDATEI [ANZAHL]</code>. Es zeigt die ANZAHL (Standard: 3) häufigsten Client-Adressen – das ist das <b>erste Feld</b> jeder Zeile – im Format <code>&lt;Anzahl&gt; &lt;IP&gt;</code>, die häufigste zuerst. Gibt es die Datei nicht: Meldung auf stderr und Exit-Code 1. Zum Ausprobieren liegt <code>~/logs/access.log</code> bereit.`,
   hints: [`Das erste Feld: <code>awk '{print $1}'</code> oder <code>cut -d' ' -f1</code>.`,

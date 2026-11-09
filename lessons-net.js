@@ -3,8 +3,38 @@
  * Prüfungsrelevant für AP1/AP2. Subnetting-Rechenaufgaben gibt es zusätzlich im Tab 🎓 Prüfung.
  */
 window.LESSONS.push(
+/* ① Lernen im Mini-Linux: Schnittstelle, Adresse, Route und Subnetz selbst erleben – ganz ohne VM */
 {
-  id: "net1-ipv4", mode: "ssh", group: "net", title: "IPv4 & Subnetting",
+  id: "net0-mini", mode: "browser", group: "net", topic: "net", stage: 1, title: "Netzwerk im Mini-Linux: Adresse, Netz, Route",
+  intro: `Bevor du an einer echten VM Netzwerke untersuchst, baust du dir hier selbst eins zusammen: Du gibst dem Mini-Linux eine Adresse, siehst, welches Netz der Kernel daraus macht,
+    rechnest Netz- und Broadcast-Adresse aus und lernst, wo Namen und Ports stehen. Das Mini-Linux hat kein Internet – für diese Grundlagen braucht es das auch nicht.`,
+  steps: [
+    { title: "Welche Schnittstellen gibt es?", text: `<code>lo</code> ist die Loopback-Schnittstelle (der Rechner spricht mit sich selbst), <code>eth0</code> die Netzwerkkarte.`,
+      cmd: "ip addr", check: { cmd: /^ip\s+(a|addr)/, out: /eth0/ },
+      explain: `Beide stehen auf <b>DOWN</b> bzw. <code>state DOWN</code>/<code>noop</code> und <code>eth0</code> hat noch keine <code>inet</code>-Adresse.` },
+    { title: "Eine Adresse vergeben", text: `Wie ein Admin, der einen Server von Hand einrichtet: Adresse <b>mit Präfix</b> vergeben und die Karte einschalten.`,
+      cmd: "ip addr add 192.168.10.77/26 dev eth0; ip link set eth0 up; ip addr show eth0",
+      check: { cmd: /ip\s+addr\s+add/, out: /inet 192\.168\.10\.77\/26/ } },
+    { title: "Welches Netz ist das?", text: `Die Routing-Tabelle zeigt, welches Netz der Kernel aus Adresse und Präfix berechnet hat:`,
+      cmd: "ip route", check: { cmd: /^ip\s+r(oute)?/, out: /192\.168\.10\.64\/26/ },
+      explain: `<code>/26</code> heißt: 26 Bits Netzanteil, 6 Bits für Hosts → 2<sup>6</sup> = 64 Adressen pro Netz. Die .77 liegt im Block <b>.64 bis .127</b>.` },
+    { title: "Selbst nachrechnen", text: `Die Maske eines /26 endet auf <code>.192</code> (binär <code>11000000</code>). Netzadresse = Adresse <b>UND</b> Maske, Broadcast = Netz <b>ODER</b> die Host-Bits (63):`,
+      cmd: `echo "Netz: 192.168.10.$(( 77 & 192 ))  Broadcast: 192.168.10.$(( (77 & 192) | 63 ))"`,
+      check: { cmd: /&\s*192/, out: /Netz: 192\.168\.10\.64\s+Broadcast: 192\.168\.10\.127/ },
+      explain: `Nutzbar sind .65 bis .126 – 62 Hosts. Genau diese Rechnung kommt in der Prüfung dran; üben kannst du sie endlos im 🧮 Subnetting-Trainer (Tab 🎓 Prüfung).` },
+    { title: "Ein Standard-Gateway eintragen", text: `Alles, was nicht im eigenen Netz liegt, geht an den Router – das <b>Standard-Gateway</b>. Es muss im eigenen Netz liegen:`,
+      cmd: "ip route add default via 192.168.10.65; ip route", check: { cmd: /route\s+add\s+default/, out: /default via 192\.168\.10\.65/ } },
+    { title: "Namen ohne DNS: /etc/hosts", text: `Bevor ein Rechner einen DNS-Server fragt, schaut er in <code>/etc/hosts</code>. Trag einen Drucker ein und „pinge“ ihn mit Namen:`,
+      cmd: `echo "192.168.10.70 drucker.lab" >> /etc/hosts; ping -c 1 -W 1 drucker.lab`,
+      check: { cmd: /ping/, out: /192\.168\.10\.70/ },
+      explain: `Der Name wurde zur Adresse aufgelöst – eine Antwort kommt nicht, weil es den Drucker nicht gibt. Genau diese Unterscheidung („Name geht, Gerät antwortet nicht“) ist bei der Fehlersuche Gold wert.` },
+    { title: "Welcher Dienst nutzt welchen Port?", text: `Die bekannten Ports stehen in <code>/etc/services</code>:`,
+      cmd: `grep -wE "22/tcp|53/udp|80/tcp|443/tcp" /etc/services`, check: { cmd: /etc\/services/, out: /ssh[\s\S]*https/ },
+      explain: `Prüfungsklassiker: 22 SSH, 25 SMTP, 53 DNS, 67/68 DHCP, 80 HTTP, 443 HTTPS, 3389 RDP. Weiter geht es in der 🧪 Übungs-VM mit echtem Netz: <code>dig</code>, <code>tracepath</code>, <code>nc</code>.` },
+  ],
+},
+{
+  id: "net1-ipv4", mode: "ssh", vm: "uebung", topic: "net", stage: 2, group: "net", title: "IPv4 & Subnetting",
   intro: `Eine IPv4-Adresse hat 32 Bit. Die <b>Präfixlänge</b> (z. B. <code>/24</code>) sagt, wie viele Bits davon das <b>Netz</b> sind, der Rest sind die <b>Hosts</b>. Wer das sicher rechnen kann, besteht jede Subnetting-Aufgabe.`,
   steps: [
     { title: "Die eigene Adresse mit Präfix", text: `<code>-4</code> zeigt nur IPv4, <code>-br</code> eine Zeile pro Schnittstelle.`,
@@ -27,7 +57,7 @@ window.LESSONS.push(
   outro: `Übe das Rechnen im Tab <b>🎓 Prüfung → Subnetting-Trainer</b> – dort gibt es endlos neue Aufgaben mit Lösungsweg.`,
 },
 {
-  id: "net2-routing", mode: "ssh", group: "net", title: "Routing & Gateway",
+  id: "net2-routing", mode: "ssh", vm: "uebung", topic: "net", stage: 2, group: "net", title: "Routing & Gateway",
   intro: `Liegt ein Ziel <b>nicht</b> im eigenen Netz, schickt der Rechner das Paket an sein <b>Standard-Gateway</b> (den Router). Welcher Weg genommen wird, steht in der Routing-Tabelle.`,
   steps: [
     { title: "Die Routing-Tabelle lesen", cmd: "ip route", check: { cmd: /^ip\s+(r|route)\b/, out: /default via/ },
@@ -43,7 +73,7 @@ window.LESSONS.push(
   ],
 },
 {
-  id: "net3-dns", mode: "ssh", group: "net", title: "DNS verstehen & prüfen",
+  id: "net3-dns", mode: "ssh", vm: "uebung", topic: "net", stage: 2, group: "net", title: "DNS verstehen & prüfen",
   intro: `DNS übersetzt Namen in Adressen. Fällt DNS aus, „geht das Internet nicht“, obwohl die Leitung steht. Mit <code>dig</code> siehst du genau, was ein DNS-Server antwortet.`,
   steps: [
     { title: "Eine Abfrage im Detail", cmd: "dig example.com", check: { cmd: /^dig\s/, out: /ANSWER SECTION|status:/ },
@@ -60,7 +90,7 @@ window.LESSONS.push(
   ],
 },
 {
-  id: "net4-ports", mode: "ssh", group: "net", title: "Ports, TCP/UDP & OSI",
+  id: "net4-ports", mode: "ssh", vm: "uebung", topic: "net", stage: 2, group: "net", title: "Ports, TCP/UDP & OSI",
   intro: `Eine IP-Adresse findet den Rechner, der <b>Port</b> den Dienst darauf. TCP baut eine Verbindung auf (Handshake, zuverlässig), UDP schickt einfach los (schnell, ohne Garantie).`,
   steps: [
     { title: "Bekannte Ports nachschlagen", text: `Die Datei <code>/etc/services</code> listet die Standard-Ports.`,
@@ -77,7 +107,7 @@ window.LESSONS.push(
   ],
 },
 {
-  id: "net5-trouble", mode: "ssh", group: "net", title: "Netzwerk-Fehlersuche Schicht für Schicht",
+  id: "net5-trouble", mode: "ssh", vm: "uebung", topic: "net", stage: 2, group: "net", title: "Netzwerk-Fehlersuche Schicht für Schicht",
   intro: `„Das Netz geht nicht“ – Profis raten nicht, sondern prüfen <b>von unten nach oben</b>. Sobald ein Schritt scheitert, hast du die Schicht gefunden.`,
   steps: [
     { title: "1 · Ist die Schnittstelle oben?", cmd: "ip -br link", check: { cmd: /^ip\s+(-\w+\s+)*l(ink)?\b/, out: /UP/ } },
