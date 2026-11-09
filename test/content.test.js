@@ -197,11 +197,13 @@ test("SQL-Krimi: Musterlösungen bestehen ihre Prüfung", async () => {
     l.steps.forEach((s, i) => {
       const where = `${l.id} Schritt ${i + 1} „${s.title}“`;
       if (!s.check) return;
-      if (!s.solution) { bad.push(`${where}: Musterlösung (solution) fehlt`); return; }
+      const sol = s.solution || s.testSolution;   // testSolution: geheime Lösung offener Fälle (wird nicht angezeigt)
+      if (!sol) { bad.push(`${where}: Musterlösung (solution oder testSolution) fehlt`); return; }
       let out;
-      try { out = textOf(db.exec(s.solution)); } catch (e) { bad.push(`${where}: SQL-Fehler ${e.message}`); return; }
+      try { out = textOf(db.exec(sol)); } catch (e) { bad.push(`${where}: SQL-Fehler ${e.message}`); return; }
       const c = s.check;
-      if (c.cmd && !c.cmd.test(s.solution)) bad.push(`${where}: Lösung passt nicht zu ${c.cmd}`);
+      if (typeof c === "function") { if (!c(sol, out)) bad.push(`${where}: Lösung besteht die Prüf-Funktion nicht`); return; }
+      if (c.cmd && !c.cmd.test(sol)) bad.push(`${where}: Lösung passt nicht zu ${c.cmd}`);
       if (errorLines(out)) bad.push(`${where}: Ausgabe sieht wie ein Fehler aus`);
       if (c.out && !c.out.test(out)) bad.push(`${where}: Ausgabe passt nicht zu ${c.out}\n${out}`);
       if (c.notOut && c.notOut.test(out)) bad.push(`${where}: Ausgabe enthält ${c.notOut}`);
@@ -209,4 +211,14 @@ test("SQL-Krimi: Musterlösungen bestehen ihre Prüfung", async () => {
     db.close();
   }
   assert.deepStrictEqual(bad, []);
+});
+/* Offene Fälle: falsche Namen dürfen die Lösung nicht bestehen, Schreibweise egal */
+test("SQL-Krimi: offene Fälle nehmen nur den richtigen Namen an", () => {
+  for (const l of LESSONS.filter((x) => x.mode === "sql")) for (const s of l.steps) {
+    if (!s.testSolution || typeof s.check !== "function") continue;
+    assert.ok(s.check(s.testSolution, ""), `${l.id}: testSolution besteht nicht`);
+    assert.ok(s.check(s.testSolution.replace(/'([^']+)'/, (_, n) => `'  ${n.toUpperCase()} '`), ""), `${l.id}: Groß-/Kleinschreibung oder Leerzeichen stören`);
+    for (const wrong of ["Lena Schmidt", "Murat Demir", "Tobias Bauer", "x"]) assert.ok(!s.check(`INSERT INTO loesung (name) VALUES ('${wrong}');`, ""), `${l.id}: falscher Name „${wrong}“ wird angenommen`);
+    assert.ok(!(s.solution), `${l.id}: offener Fall darf keine sichtbare solution haben`);
+  }
 });

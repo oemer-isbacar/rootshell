@@ -2,6 +2,9 @@
  * Lernpfad: ① SQL im Browser (folgt) → ② Üben in der Übungs-VM → ③ MariaDB auf der Server-VM (v8-db) → ④ Störfälle (folgen).
  * Übungen (vm: "uebung") laufen in der Wegwerf-VM; prep wird nach dem Zurücksetzen auf „basis“ als root ausgeführt.
  */
+/* Prüfsumme für offene Fälle: Der Name des Täters steht so nicht im Klartext im Code */
+function fallHash(s) { let x = 5381; for (const c of String(s).trim().toLowerCase()) x = ((x * 33) ^ c.codePointAt(0)) >>> 0; return x.toString(36); }
+
 window.LESSONS.push(
 /* ---------- ① Lernen: SQL-Krimi Fall 1 (SQL-Konsole im Browser, Datenbank krimi1 aus sql-cases.js) ---------- */
 {
@@ -98,7 +101,45 @@ window.LESSONS.push(
       explain: `<b>Fall gelöst!</b> Tobias Bauer (Vertrieb) hat die verlorene Karte K-117 in der Kantine gefunden, sein Laptop-Antrag war abgelehnt worden – und mit der fremden Karte holte er sich das Gerät aus dem Serverraum.
         <br><b>Was die IT daraus lernt:</b> verlorene Karten sofort sperren, Zutritte zum Serverraum regelmäßig auswerten, Admin-Geräte verschlüsseln.` },
   ],
-  outro: `Du kannst jetzt <code>SELECT</code>, <code>WHERE</code>, <code>AND</code>, <code>ORDER BY</code>, <code>JOIN</code>, <code>GROUP BY</code>, <code>LIKE</code>, <code>BETWEEN</code> und Unterabfragen. Als Nächstes übst du das an einem <b>echten MariaDB-Server</b> in der Übungs-VM.`,
+  outro: `Du kannst jetzt <code>SELECT</code>, <code>WHERE</code>, <code>AND</code>, <code>ORDER BY</code>, <code>JOIN</code>, <code>GROUP BY</code>, <code>LIKE</code>, <code>BETWEEN</code> und Unterabfragen. Bereit für einen Fall <b>ohne Anleitung</b>? Dann weiter mit Fall 2.`,
+},
+
+/* ---------- ① Lernen: SQL-Krimi Fall 2 – offen ermitteln (Datenbank krimi2) ---------- */
+{
+  id: "db1-krimi-c", mode: "sql", db: "krimi2", group: "db", topic: "db", stage: 1, title: "SQL-Krimi · Fall 2: Das Datenleck (offen)",
+  intro: `Drei Wochen später, wieder bei Nordlicht Logistik: <b>Kundendaten sind im Netz aufgetaucht.</b> Diesmal gibt es keine Anleitung – nur eine größere Datenbank mit zwei Wochen Firmenalltag
+    (Logins, CRM-Exporte, USB-Sticks, Kartenleser, Abwesenheiten) und ein paar Zwischenziele. Wie du ermittelst, entscheidest du selbst.
+    Tipps gibt es gestuft, wenn du festhängst. Ein guter Start: Klick links auf die Tabellen und schau, was drinsteht.`,
+  steps: [
+    { title: "Lies die Meldungen", task: `Was ist passiert, und wie meldest du am Ende den Täter?`,
+      hint: `Wie in Fall 1: alle Zeilen der Tabelle <code>meldungen</code>.`,
+      solution: `SELECT * FROM meldungen;`, check: { cmd: /from\s+meldungen/i, out: /leakbase/ },
+      explain: `Gesucht ist, wer die Datei <code>kunden_export_2026-10.csv</code> exportiert hat. Das CRM protokolliert jeden Export.` },
+    { title: "Zwischenziel: Woher stammt die Datei?",
+      task: `Finde den Export, aus dem die Datei stammt: Wer, wann, an welchem Rechner, wie viele Zeilen?`,
+      hint: `<ol><li>Die Exporte stehen in <code>crm_exporte</code>.</li><li>Filtere nach dem Dateinamen aus der Meldung – oder sortiere nach der Zahl der Zeilen.</li></ol>`,
+      solution: `SELECT * FROM crm_exporte WHERE datei = 'kunden_export_2026-10.csv';`,
+      check: { cmd: /crm_exporte/i, out: /kunden_export_2026-10\.csv/ },
+      explain: `Freitag, 30.10., 23:14 Uhr, Benutzer <b>lschmidt</b> am Rechner <b>PC-305</b> – 4812 Zeilen. Alle anderen Exporte haben ein paar Hundert Zeilen und laufen tagsüber.` },
+    { title: "Zwischenziel: War es wirklich lschmidt?",
+      task: `Prüfe, wem das Konto <code>lschmidt</code> gehört und ob diese Person am 30.10. überhaupt im Haus sein konnte.`,
+      hint: `<ol><li>Den Namen zum Benutzer findest du in <code>mitarbeiter</code>.</li><li>Urlaub und Krankheit stehen in <code>abwesenheiten</code> – verbinde beides per <code>JOIN</code> oder Unterabfrage.</li></ol>`,
+      solution: `SELECT m.name, a.von, a.bis, a.art FROM abwesenheiten a JOIN mitarbeiter m ON m.id = a.mitarbeiter_id WHERE m.benutzer = 'lschmidt';`,
+      check: { cmd: /abwesenheiten/i, out: /2026-10-27/ },
+      explain: `Lena Schmidt war vom 27.10. bis 07.11. <b>im Urlaub</b>. Jemand anderes hat ihr Konto benutzt. Wer saß in der Nacht an PC-305?` },
+    { title: "Löse den Fall",
+      task: `Finde heraus, wer den Export wirklich gemacht hat, und trage den Namen ein:<br><code>INSERT INTO loesung (name) VALUES ('Vorname Nachname');</code><br>
+        Ist der Name falsch, passiert nichts – ermittle weiter.`,
+      hint: `<ol><li>Es gibt mehrere Wege. Schau dir alles an, was in der Nacht vom 30.10. nach 22 Uhr passiert ist – in <code>logins</code>, <code>zutritte</code> und <code>usb_ereignisse</code>.</li>
+        <li>Fehlgeschlagene Logins (<code>erfolgreich = 0</code>) kurz vor dem Export verraten: Hier hat jemand das Passwort probiert.</li>
+        <li>Wurde während des Exports ein USB-Stick eingesteckt? Wem der gehört, steht in <code>usb_inventar</code>. Und wessen Karte öffnete in der Nacht die Tür zum Vertrieb?</li></ol>`,
+      testSolution: `INSERT INTO loesung (name) VALUES ('Kai Richter');`,
+      check: (cmd) => { const m = cmd.match(/insert\s+into\s+loesung[^']*'([^']+)'/i); return !!m && fallHash(m[1]) === "1szgwxh"; },
+      explain: `<b>Fall gelöst: Kai Richter (Vertrieb).</b> Er kam um 22:51 ins Haus, öffnete um 22:55 den Vertrieb, probierte an Lenas Rechner zweimal ihr Passwort und war beim dritten Versuch drin.
+        Um 23:14 exportierte er 4812 Kunden und zog sie um 23:16 auf seinen dienstlichen USB-Stick <code>SN-7781-KR</code>.
+        <br><b>Was die IT daraus lernt:</b> Konten während des Urlaubs sperren, nach Fehlversuchen sperren, große Exporte melden, USB-Sticks nur verschlüsselt und protokolliert.` },
+  ],
+  outro: `Das war echte Ermittlungsarbeit mit SQL – genau so werten Admins bei einem Sicherheitsvorfall Logs aus. Weiter geht es mit echtem MariaDB in der Übungs-VM.`,
 },
 
 /* ---------- ② Üben: echtes MariaDB in der Übungs-VM ---------- */
