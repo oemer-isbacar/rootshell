@@ -212,7 +212,7 @@ chmod +x ~/bin/sysbericht.sh`, check: { cmd: /cat\s*>\s*~\/bin\/sysbericht\.sh/ 
 /* WINDOWS · TEIL 4 – POWERSHELL-SKRIPTE (PowerShell 7 in der VM)        */
 /* ===================================================================== */
 {
-  id: "y1-param", mode: "ps", vm: "uebung", topic: "ps-script", stage: 2, prep: "command -v pwsh >/dev/null || { echo \"Installiere PowerShell 7 …\"; snap install powershell --classic >/dev/null; }", group: "ps-script", title: "Skripte mit Parametern & Hilfe",
+  id: "y1-param", mode: "ps", vm: "uebung", topic: "ps-script", stage: 2, prep: "command -v pwsh >/dev/null || { echo \"Installiere PowerShell 7 …\"; snap install powershell --classic >/dev/null; }; mkdir -p /home/ubuntu/ps-lab /home/ubuntu/skripte && chown ubuntu:ubuntu /home/ubuntu/ps-lab /home/ubuntu/skripte", group: "ps-script", title: "Skripte mit Parametern & Hilfe",
   intro: `Ein gutes Skript bedient sich wie ein Cmdlet: mit benannten Parametern, Prüfung der Eingaben und eingebauter Hilfe. Deine Skripte kommen nach <code>~/skripte</code>. Mehrzeilige Blöcke mit „übernehmen“ einfügen und Enter drücken.`,
   steps: [
     { title: "Das Skript", cmd: `New-Item ~/skripte -ItemType Directory -Force | Out-Null
@@ -248,7 +248,7 @@ Get-ChildItem -Path $Pfad -File -Recurse:$Rekursiv -ErrorAction SilentlyContinue
   ],
 },
 {
-  id: "y2-logic", mode: "ps", vm: "uebung", topic: "ps-script", stage: 2, prep: "command -v pwsh >/dev/null || { echo \"Installiere PowerShell 7 …\"; snap install powershell --classic >/dev/null; }", group: "ps-script", title: "Vergleiche, if & switch",
+  id: "y2-logic", mode: "ps", vm: "uebung", topic: "ps-script", stage: 2, prep: "command -v pwsh >/dev/null || { echo \"Installiere PowerShell 7 …\"; snap install powershell --classic >/dev/null; }; mkdir -p /home/ubuntu/ps-lab /home/ubuntu/skripte && chown ubuntu:ubuntu /home/ubuntu/ps-lab /home/ubuntu/skripte", group: "ps-script", title: "Vergleiche, if & switch",
   intro: `PowerShell vergleicht mit Operatoren wie <code>-eq</code> statt <code>==</code>. Dazu kommen mächtige Werkzeuge für Muster: <code>-like</code>, <code>-match</code> und <code>switch</code>.`,
   steps: [
     { title: "Vergleichsoperatoren", cmd: [`5 -gt 3`, `'Server01' -like 'server*'`, `'web-03' -match '\\d+$'; $Matches[0]`, `'IT' -in 'IT', 'Vertrieb'`], check: { cmd: /-in\s+'IT'/i, out: /True/ },
@@ -266,7 +266,7 @@ Get-ChildItem -Path $Pfad -File -Recurse:$Rekursiv -ErrorAction SilentlyContinue
   ],
 },
 {
-  id: "y3-loops", mode: "ps", vm: "uebung", topic: "ps-script", stage: 2, prep: "command -v pwsh >/dev/null || { echo \"Installiere PowerShell 7 …\"; snap install powershell --classic >/dev/null; }", group: "ps-script", title: "Schleifen & Ergebnisse sammeln",
+  id: "y3-loops", mode: "ps", vm: "uebung", topic: "ps-script", stage: 2, prep: "command -v pwsh >/dev/null || { echo \"Installiere PowerShell 7 …\"; snap install powershell --classic >/dev/null; }; mkdir -p /home/ubuntu/ps-lab /home/ubuntu/skripte && chown ubuntu:ubuntu /home/ubuntu/ps-lab /home/ubuntu/skripte", group: "ps-script", title: "Schleifen & Ergebnisse sammeln",
   intro: `In Skripten sammelst du oft Ergebnisse – etwa den Zustand vieler Server – und gibst sie am Ende als Tabelle oder CSV aus. Der Trick: eigene Objekte bauen.`,
   steps: [
     { title: "Namen erzeugen", cmd: `1..5 | ForEach-Object { 'Server{0:D2}' -f $_ }`, check: { cmd: /-f\s+\$_/i, out: /Server05/ },
@@ -289,7 +289,7 @@ $ergebnis`, check: { cmd: /pscustomobject/i, out: /invalid\s+False/ },
   ],
 },
 {
-  id: "y4-func", mode: "ps", vm: "uebung", topic: "ps-script", stage: 2, prep: "command -v pwsh >/dev/null || { echo \"Installiere PowerShell 7 …\"; snap install powershell --classic >/dev/null; }", group: "ps-script", title: "Funktionen wie echte Cmdlets",
+  id: "y4-func", mode: "ps", vm: "uebung", topic: "ps-script", stage: 2, prep: "command -v pwsh >/dev/null || { echo \"Installiere PowerShell 7 …\"; snap install powershell --classic >/dev/null; }; mkdir -p /home/ubuntu/ps-lab /home/ubuntu/skripte && chown ubuntu:ubuntu /home/ubuntu/ps-lab /home/ubuntu/skripte", group: "ps-script", title: "Funktionen wie echte Cmdlets",
   intro: `Mit <code>[CmdletBinding()]</code> wird aus einer einfachen Funktion eine <b>erweiterte Funktion</b>: Sie nimmt Daten aus der Pipeline, kennt <code>-Verbose</code> und <code>-WhatIf</code> und fühlt sich an wie ein eingebautes Cmdlet.`,
   steps: [
     { title: "Funktion mit Pipeline-Eingabe", cmd: `function Get-Dateialter {
@@ -331,7 +331,7 @@ Export-ModuleMember -Function Get-Gruss
   ],
 },
 {
-  id: "y5-robust", mode: "ps", vm: "uebung", topic: "ps-script", stage: 2, prep: "command -v pwsh >/dev/null || { echo \"Installiere PowerShell 7 …\"; snap install powershell --classic >/dev/null; }", group: "ps-script", title: "Robuste Skripte: Fehler, Exit-Codes & Protokoll",
+  id: "y5-robust", mode: "ps", vm: "uebung", topic: "ps-script", stage: 2, prep: "command -v pwsh >/dev/null || { echo \"Installiere PowerShell 7 …\"; snap install powershell --classic >/dev/null; }; mkdir -p /home/ubuntu/ps-lab /home/ubuntu/skripte && chown ubuntu:ubuntu /home/ubuntu/ps-lab /home/ubuntu/skripte", group: "ps-script", title: "Robuste Skripte: Fehler, Exit-Codes & Protokoll",
   intro: `Ein Skript, das nachts als geplante Aufgabe läuft, muss drei Dinge können: Fehler sauber abfangen, protokollieren, was passiert ist, und per <b>Exit-Code</b> melden, ob alles geklappt hat.`,
   steps: [
     { title: "Das Skript", cmd: `Set-Content ~/skripte/Kopiere-Konfig.ps1 -Value @'
@@ -369,7 +369,7 @@ catch {
   ],
 },
 {
-  id: "y6-project", mode: "ps", vm: "uebung", topic: "ps-script", stage: 2, prep: "command -v pwsh >/dev/null || { echo \"Installiere PowerShell 7 …\"; snap install powershell --classic >/dev/null; }", group: "ps-script", title: "Projekt: Aufräum-Skript mit -WhatIf",
+  id: "y6-project", mode: "ps", vm: "uebung", topic: "ps-script", stage: 2, prep: "command -v pwsh >/dev/null || { echo \"Installiere PowerShell 7 …\"; snap install powershell --classic >/dev/null; }; mkdir -p /home/ubuntu/ps-lab /home/ubuntu/skripte && chown ubuntu:ubuntu /home/ubuntu/ps-lab /home/ubuntu/skripte", group: "ps-script", title: "Projekt: Aufräum-Skript mit -WhatIf",
   intro: `Zum Abschluss baust du ein Werkzeug, das in fast jeder Firma läuft: Es löscht alte Dateien (Logs, Downloads, temporäre Dateien) – mit Parametern, Eingabeprüfung, Probelauf und Ergebnisbericht.`,
   steps: [
     { title: "Das Skript", cmd: `Set-Content ~/skripte/Remove-AlteDateien.ps1 -Value @'
