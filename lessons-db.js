@@ -369,4 +369,93 @@ EOF`, check: { cmd: /gitea-db.*compose\.yaml|compose\.yaml/ },
   ],
   outro: `Das ist das Muster fast aller modernen Selbst-Hosting-Dienste (Nextcloud, Paperless, Bookstack …): Anwendung und Datenbank als Container, verbunden über den Dienstnamen, Daten in Volumes – und Sicherungen per <code>docker exec … dump</code>.`,
 },
+
+/* ---------- ③ Anwenden: Nextcloud mit MariaDB (Container, Port 8090) ---------- */
+{
+  id: "db3-nextcloud", mode: "ssh", vm: "server", group: "db", topic: "db", stage: 3, title: "Nextcloud mit MariaDB betreiben",
+  intro: `<b>Nextcloud</b> ist die eigene Cloud für Dateien, Kalender und Kontakte – einer der beliebtesten Dienste im Homelab und in kleinen Firmen. Du richtest sie mit MariaDB als Container ein
+    und erledigst dann, was Admins im Alltag wirklich tun: Benutzer mit <code>occ</code> anlegen, Hintergrundjobs per Cron, in die Datenbank schauen und sauber sichern.
+    Nextcloud braucht etwas mehr Arbeitsspeicher – andere Container vorher ruhig stoppen.`,
+  steps: [
+    { title: "Docker bereitstellen",
+      cmd: "sudo apt install -y docker.io docker-compose-v2 && sudo docker compose version",
+      check: { cmd: /apt(-get)?\s+install\s.*docker/, out: /Docker Compose version/ } },
+    { title: "Compose-Datei: Nextcloud und MariaDB",
+      text: `Zwei Besonderheiten für Nextcloud: MariaDB läuft mit <code>READ-COMMITTED</code> und Binärlog im Zeilenformat (so empfiehlt es Nextcloud), und die Variablen <code>NEXTCLOUD_ADMIN_*</code>
+        lassen die Installation beim ersten Start automatisch durchlaufen. <code>NEXTCLOUD_TRUSTED_DOMAINS</code> legt fest, unter welchen Adressen Nextcloud sich aufrufen lässt.`,
+      cmd: `mkdir -p ~/selfhost/nextcloud && cd ~/selfhost/nextcloud && cat > compose.yaml << 'EOF'
+services:
+  db:
+    image: mariadb:11
+    container_name: nc-mariadb
+    command: --transaction-isolation=READ-COMMITTED --log-bin=binlog --binlog-format=ROW
+    environment:
+      MARIADB_ROOT_PASSWORD: Root_2026_geheim
+      MARIADB_DATABASE: nextcloud
+      MARIADB_USER: nextcloud
+      MARIADB_PASSWORD: Nc_2026_geheim
+    volumes:
+      - ./mariadb:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      retries: 30
+    restart: unless-stopped
+
+  app:
+    image: nextcloud:30-apache
+    container_name: nc-app
+    ports:
+      - "8090:80"
+    environment:
+      MYSQL_HOST: db
+      MYSQL_DATABASE: nextcloud
+      MYSQL_USER: nextcloud
+      MYSQL_PASSWORD: Nc_2026_geheim
+      NEXTCLOUD_ADMIN_USER: admin
+      NEXTCLOUD_ADMIN_PASSWORD: Admin_2026_sicher
+      NEXTCLOUD_TRUSTED_DOMAINS: localhost {{IP}}
+    volumes:
+      - ./html:/var/www/html
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+EOF`, check: { cmd: /compose\.yaml/ } },
+    { title: "Starten und Installation abwarten",
+      text: `Beim ersten Start lädt Docker die Images und Nextcloud installiert sich selbst in die Datenbank – das dauert ein paar Minuten. <code>occ status</code> verrät, wann es fertig ist.
+        <code>occ</code> ist das Kommandozeilen-Werkzeug von Nextcloud; es läuft immer als Benutzer <code>www-data</code>.`,
+      cmd: `cd ~/selfhost/nextcloud && sudo docker compose up -d --wait && for i in $(seq 120); do curl -s http://localhost:8090/status.php | grep -q '"installed":true' && break; sleep 3; done; sudo docker exec -u www-data nc-app php occ status`,
+      check: { cmd: /compose\s+up/, out: /installed: true/ } },
+    { title: "Benutzer mit occ anlegen",
+      text: `Statt sich durch die Weboberfläche zu klicken, legen Admins Benutzer per <code>occ</code> an – das lässt sich auch für viele Benutzer skripten. Das Passwort kommt aus einer Umgebungsvariable, damit es nicht in der Prozessliste steht.`,
+      cmd: `sudo docker exec -u www-data -e OC_PASS='Lisa_2026_sicher' nc-app php occ user:add --password-from-env --display-name "Lisa Berger" lisa`,
+      check: { cmd: /occ\s+user:add/, out: /created successfully|already exists/i } },
+    { title: "Eine Datei per WebDAV hochladen",
+      text: `Die Nextcloud-Apps und Netzlaufwerke sprechen <b>WebDAV</b> – ein HTTP-Protokoll für Dateien. <code>curl -T</code> lädt eine Datei hoch, <b>201</b> heißt „angelegt“.`,
+      cmd: `echo "Hallo aus rootshell" > /tmp/notiz.txt && curl -s -u lisa:Lisa_2026_sicher -T /tmp/notiz.txt -o /dev/null -w "%{http_code}\\n" http://localhost:8090/remote.php/dav/files/lisa/notiz.txt`,
+      check: { cmd: /remote\.php\/dav/, out: /\b20[14]\b/ },
+      explain: `Im Windows-Browser: <a href="http://{{IP}}:8090/" target="_blank">http://{{IP}}:8090/</a>, anmelden als <code>lisa</code> / <code>Lisa_2026_sicher</code> – die <code>notiz.txt</code> ist da.` },
+    { title: "SQL: Wer hat ein Konto?",
+      text: `Alle Nextcloud-Tabellen beginnen mit <code>oc_</code>.`,
+      cmd: `sudo docker exec nc-mariadb mariadb -u nextcloud -pNc_2026_geheim nextcloud -e "SELECT uid, displayname FROM oc_users;"`,
+      check: { cmd: /oc_users/, out: /lisa/ } },
+    { title: "SQL: Wo steht die Datei? (JOIN)",
+      text: `Die Datei selbst liegt im Dateisystem – die Datenbank kennt nur ihre <b>Metadaten</b>: Pfad, Größe, Speicher. Jeder Benutzer hat einen eigenen Speicher (<code>home::lisa</code>).`,
+      cmd: `sudo docker exec nc-mariadb mariadb -u nextcloud -pNc_2026_geheim nextcloud -e "SELECT s.id AS speicher, f.path, f.size FROM oc_filecache f JOIN oc_storages s ON s.numeric_id = f.storage WHERE f.name = 'notiz.txt';"`,
+      check: { cmd: /join/i, out: /home::lisa/ },
+      explain: `Darum gilt: Dateien <b>nie</b> direkt in den Datenordner kopieren – die Datenbank wüsste nichts davon. Wer es doch tut, muss mit <code>occ files:scan --all</code> neu einlesen.` },
+    { title: "Hintergrundjobs per Cron",
+      text: `Nextcloud räumt regelmäßig auf (Papierkorb, Versionen, Vorschaubilder). Zuverlässig geht das nur per <b>Cron</b>: alle 5 Minuten <code>cron.php</code> ausführen.`,
+      cmd: [`sudo docker exec -u www-data nc-app php occ background:cron`,
+            `( sudo crontab -l 2>/dev/null | grep -v nc-app; echo "*/5 * * * * docker exec -u www-data nc-app php -f /var/www/html/cron.php" ) | sudo crontab - && sudo crontab -l | tail -1`],
+      check: { cmd: /crontab/, out: /cron\.php/ } },
+    { title: "Sauber sichern: Wartungsmodus und Dump",
+      text: `Während der Sicherung soll niemand Dateien ändern. Der <b>Wartungsmodus</b> sperrt Nextcloud kurz für Benutzer, <code>--single-transaction</code> sichert die Datenbank in einem konsistenten Zustand.`,
+      cmd: `sudo docker exec -u www-data nc-app php occ maintenance:mode --on && sudo docker exec nc-mariadb mariadb-dump --single-transaction -u root -pRoot_2026_geheim nextcloud | gzip > ~/nextcloud-db-$(date +%F).sql.gz; sudo docker exec -u www-data nc-app php occ maintenance:mode --off && ls -lh ~/nextcloud-db-*.sql.gz`,
+      check: { cmd: /maintenance:mode/, out: /nextcloud-db-.*\.sql\.gz/ },
+      explain: `Zu einer vollständigen Sicherung gehören außerdem der Ordner <code>~/selfhost/nextcloud/html/data</code> (die Dateien) und <code>config/config.php</code>. Wiederherstellen in umgekehrter Reihenfolge – und danach <code>occ maintenance:data-fingerprint</code>, damit die Apps neu synchronisieren.` },
+  ],
+  outro: `Damit hast du die drei typischen Wege kennengelernt, wie Anwendungen ihre Datenbank nutzen: WordPress auf einem klassischen LEMP-Server, Gitea und Nextcloud mit eigener MariaDB im Container. Die Werkzeuge sind überall dieselben: SQL, Dump, Rechte.`,
+},
 );
