@@ -21,8 +21,8 @@ DROP DATABASE IF EXISTS shop;
 CREATE DATABASE shop;
 USE shop;
 CREATE TABLE kunden (id INT PRIMARY KEY, name VARCHAR(60), ort VARCHAR(40));
-INSERT INTO kunden VALUES (1,'Bäckerei Sonnenschein','Calw'), (2,'Autohaus Wagner','Nagold'), (3,'Praxis Dr. Yılmaz','Pforzheim'),
-  (4,'Café Kranz','Calw'), (5,'Schreinerei Holzwurm','Bad Liebenzell'), (6,'Blumen Maier','Hirsau');
+INSERT INTO kunden VALUES (1,'Bäckerei Sonnenschein','Musterstadt'), (2,'Autohaus Wagner','Nordhafen'), (3,'Praxis Dr. Yılmaz','Bergheim'),
+  (4,'Café Kranz','Musterstadt'), (5,'Schreinerei Holzwurm','Talbach'), (6,'Blumen Maier','Lindenau');
 CREATE TABLE bestellungen (id INT AUTO_INCREMENT PRIMARY KEY, kunde_id INT, datum DATE, betrag DECIMAL(8,2));
 INSERT INTO bestellungen (kunde_id, datum, betrag) VALUES (1,'2026-11-02',120.50), (2,'2026-11-03',980.00), (3,'2026-11-05',45.90),
   (1,'2026-11-06',77.10), (4,'2026-11-07',230.00), (6,'2026-11-08',19.99);

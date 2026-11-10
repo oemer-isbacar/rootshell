@@ -43,7 +43,7 @@ window.SQL_DBS.krimi2 = {
       L.push([user, pc, at(d, h, Math.min(59, m + 5)), 1]);
       if (rnd() < 0.5) Z.push([karte, "Kantine", at(d, 12, Math.floor(rnd() * 50))]);
       if ((abt === "Vertrieb" || abt === "Buchhaltung") && rnd() < 0.45) {
-        const name = pick(["angebote", "kunden_calw", "offene_posten", "lieferanten", "kunden_nagold", "mahnungen", "umsatz_q3"]);
+        const name = pick(["angebote", "kunden_nord", "offene_posten", "lieferanten", "kunden_sued", "mahnungen", "umsatz_q3"]);
         X.push([user, pc, at(d, 9 + Math.floor(rnd() * 7), Math.floor(rnd() * 60)), `${name}_${d.slice(5).replace("-", "")}.csv`, 20 + Math.floor(rnd() * 380)]);
       }
       if (usbOf[id] && rnd() < 0.3) {

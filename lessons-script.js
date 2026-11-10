@@ -33,7 +33,7 @@ EOF`, check: { cmd: /cat\s*>\s*~\/bin\/hallo\.sh/ },
   id: "x2-vars", mode: "ssh", vm: "uebung", topic: "script", stage: 2, prep: "mkdir -p /home/ubuntu/bin && chown ubuntu:ubuntu /home/ubuntu/bin", group: "script", title: "Variablen, Parameter & Rechnen",
   intro: `Skripte werden erst nützlich, wenn sie mit verschiedenen Werten arbeiten: Variablen, Parameter beim Aufruf und Eingaben.`,
   steps: [
-    { title: "Variablen und Anführungszeichen", cmd: ['ORT="Calw Stadt"', 'echo "Ich bin in $ORT"', "echo 'Ich bin in $ORT'"], check: { cmd: /^echo\s+'[^']*\$ORT/, out: /in \$ORT/ },
+    { title: "Variablen und Anführungszeichen", cmd: ['ORT="Musterstadt Mitte"', 'echo "Ich bin in $ORT"', "echo 'Ich bin in $ORT'"], check: { cmd: /^echo\s+'[^']*\$ORT/, out: /in \$ORT/ },
       explain: `Kein Leerzeichen um das <code>=</code>! In <b>doppelten</b> Anführungszeichen werden Variablen ersetzt, in <b>einfachen</b> nicht. Faustregel: Variablen immer in doppelte Anführungszeichen setzen (<code>"$ORT"</code>), sonst zerfallen Werte mit Leerzeichen in mehrere Wörter.` },
     { title: "Ein Skript mit Parametern", cmd: `cat > ~/bin/gruss.sh << 'EOF'
 #!/bin/bash
