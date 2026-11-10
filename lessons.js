@@ -237,7 +237,9 @@ EOF`, check: { cmd: /backup\.sh/ },
       explain: `Die VM heißt <code>fis-lab</code>, hat 2 CPU-Kerne, 2 GB RAM und 15 GB Platte. Die App meldet sich per SSH-Schlüssel an – kein Passwort nötig. Das Passwort des Benutzers <code>ubuntu</code> ist <code>linuxlab</code>.` },
     { title: "Verbinden", text: `Läuft die VM, verbindet sich das Terminal automatisch. Sonst: <b>🔌 Verbinden</b>.`, event: "ssh-connected" },
     { title: "Bin ich drin?", cmd: "cat /etc/os-release", check: { cmd: /os-release|lsb_release|hostnamectl/, out: /Ubuntu|Debian/i } },
-    { title: "Passwort ändern", text: `Gute Gewohnheit: Standard-Passwörter sofort ändern. (Die App selbst nutzt einen Schlüssel – du sperrst dich also nicht aus.)`, cmd: "passwd", check: { cmd: /^passwd/, out: /success|erfolgreich|updated/i } },
+    { title: "Passwort ändern", text: `Gute Gewohnheit: Standard-Passwörter sofort ändern. <code>passwd</code> fragt zuerst nach dem <b>aktuellen Passwort – das ist <code>linuxlab</code></b> –, danach zweimal nach dem neuen.
+        Beim Tippen siehst du nichts, nicht einmal Sternchen – das ist unter Linux normal. (Die App selbst meldet sich per Schlüssel an, du sperrst dich also nicht aus.
+        Setzt du die VM auf den Werkszustand zurück, gilt wieder <code>linuxlab</code>.)`, cmd: "passwd", check: { cmd: /^passwd/, out: /success|erfolgreich|updated/i } },
     { title: "Pause & Feierabend", text: `Eine laufende VM belegt RAM und CPU deines PCs. Deshalb:<ul><li><b>☕ Pause</b> – friert die VM ein (Arbeitsspeicher wird gesichert), weiter geht's in Sekunden genau dort.</li><li><b>🌙 Feierabend</b> – fährt die VM sauber herunter.</li><li>In der Zentrale kannst du einstellen, dass die VM nach X Minuten ohne Eingabe automatisch pausiert.</li></ul>` },
     { title: "Snapshots = Rettungsanker", text: `Vor Experimenten in der Zentrale einen <b>Snapshot</b> anlegen. Kaputt gemacht? Einfach zurückspielen.<br><br><b>Eigene Proxmox-VM?</b> Geht auch: „🔌 Verbinden“ → „Andere Maschine“ und IP + Benutzer eintragen.` },
   ],
