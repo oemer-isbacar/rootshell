@@ -226,3 +226,18 @@ test("SQL-Krimi: offene Fälle nehmen nur den richtigen Namen an", () => {
     assert.ok(!(s.solution), `${l.id}: offener Fall darf keine sichtbare solution haben`);
   }
 });
+/* zip.js (Komplett-Sicherung): Rundreise, Umlaute, gespeicherte und komprimierte Einträge, Beschädigung erkannt */
+test("ZIP-Sicherung: einpacken und wieder auspacken", async () => {
+  const Z = require("../zip.js");
+  const big = new Uint8Array(500000).map((_, i) => (i * 31) % 251);          // komprimierbar
+  const rnd = new Uint8Array(50000).map(() => Math.floor(Math.random() * 256)); // bleibt unkomprimiert
+  const blob = await Z.create([{ name: "fortschritt.json", data: '{"ä":"Übung"}' }, { name: "mini-linux.bin", data: big }, { name: "zufall.bin", data: rnd }]);
+  const buf = new Uint8Array(await blob.arrayBuffer());
+  const back = await Z.read(buf);
+  assert.strictEqual(new TextDecoder().decode(back["fortschritt.json"]), '{"ä":"Übung"}');
+  assert.deepStrictEqual([...back["mini-linux.bin"]], [...big]);
+  assert.deepStrictEqual([...back["zufall.bin"]], [...rnd]);
+  assert.ok(buf.length < big.length, "komprimierbare Daten werden kleiner");
+  const badLast = buf.slice(); const i = Buffer.from(buf).indexOf("zufall.bin") + 40; badLast[i] ^= 0xff;
+  await assert.rejects(Z.read(badLast), /beschädigt|Prüfsumme/);
+});

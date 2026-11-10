@@ -65,7 +65,7 @@ Mini-Linux, SQL-Konsole, Prüfung und Wargame laufen ohne VM. Die VM-Zentrale ze
 
 Beim ersten Start zeigt ein **🩺 Systemcheck**, was eingerichtet ist und was noch fehlt (Hyper-V, Multipass, VM, Windows-Sandbox) – und welche Teile du damit schon nutzen kannst. Die VM legst du über **⚙ VM-Zentrale** an, die Sandbox startest du im Windows-Kurs mit **▶ Sandbox starten**.
 
-Dein Lernstand wird im Browser gespeichert. Unter **📊 Fortschritt** siehst du ihn auf einen Blick und sicherst ihn als Datei – etwa vor dem Leeren des Browsers oder für den Umzug auf einen anderen PC.
+Dein Lernstand wird im Browser gespeichert. Unter **📊 Fortschritt** siehst du ihn auf einen Blick. **⬇ Alles als ZIP sichern** packt Lernstand (Lektionen, Training, Missionen, Wargame, Prüfungen) und den aktuellen Zustand des Mini-Linux in eine ZIP-Datei – zum Beispiel für deine Cloud oder den Umzug auf einen anderen PC. Mit **⬆ Sicherung laden** holst du sie zurück (ältere `.json`-Sicherungen gehen auch). Die beiden VMs sind nicht enthalten: Sie sind mehrere GB groß und an den PC gebunden – auf dem neuen PC legt die App sie frisch an.
 
 ## Die Umgebungen
 

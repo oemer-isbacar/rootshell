@@ -1752,30 +1752,74 @@ function renderProgress() {
   };
   $("#progress-body").innerHTML = tr("linux") + tr("windows") + `
     <section><h4>Sicherung</h4>
-      <p class="muted small">Dein Fortschritt liegt nur in diesem Browser. Leert der Browser seinen Speicher, ist er weg. Sichere ihn als Datei, auch für den Umzug auf einen anderen PC.</p>
-      <div class="btnrow"><button data-prog="export" class="primary">⬇ Als Datei sichern</button><button data-prog="import">⬆ Aus Datei laden</button>
-      <input type="file" id="prog-file" accept=".json,application/json" hidden></div></section>
+      <p class="muted small">Dein Fortschritt und das Mini-Linux liegen nur in diesem Browser. Leert der Browser seinen Speicher, sind sie weg.
+        Sichere beides als <b>ZIP-Datei</b> – zum Beispiel in deine Cloud – und lade sie auf einem anderen PC wieder.</p>
+      <div class="btnrow"><button data-prog="export" class="primary">⬇ Alles als ZIP sichern</button><button data-prog="import">⬆ Sicherung laden</button>
+      <input type="file" id="prog-file" accept=".zip,.json,application/zip,application/json" hidden></div>
+      <p class="muted small">Enthalten: Lektionen, Training, Missionen, Wargame, Prüfungen und der aktuelle Zustand des Mini-Linux.
+        Nicht enthalten sind die Übungs- und die Server-VM – sie sind mehrere GB groß und an diesen PC gebunden; auf dem neuen PC legt die App sie frisch an.
+        Ältere Sicherungen als <code>.json</code> lassen sich weiterhin laden.</p></section>
     <section><h4>Sonstiges</h4><div class="btnrow"><button data-prog="check">🩺 Systemcheck</button><button data-prog="reset" class="danger">🗑 Fortschritt zurücksetzen</button></div></section>`;
 }
 function openProgress() { renderProgress(); $("#progress-dialog").showModal(); }
-function exportProgress() {
+/* ---------- Komplett-Sicherung als ZIP: Lernstand + Mini-Linux (für Cloud, PC-Wechsel) ---------- */
+function progressData() {
   const data = {};
   for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith("linuxlab.") && k !== KEYS.ssh) data[k] = localStorage.getItem(k); }
-  const blob = new Blob([JSON.stringify({ app: "rootshell", version: 1, exported: new Date().toISOString(), data }, null, 2)], { type: "application/json" });
+  return { app: "rootshell", version: 2, exported: new Date().toISOString(), data };
+}
+function download(blob, name) {
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob); a.download = `rootshell-fortschritt-${new Date().toISOString().slice(0, 10)}.json`;
+  a.href = URL.createObjectURL(blob); a.download = name;
   document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  toast("Fortschritt gesichert – die Datei liegt in deinen Downloads.");
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+async function exportBackup(btn) {
+  const label = btn?.textContent;
+  if (btn) { btn.disabled = true; btn.textContent = "Packe …"; }
+  try {
+    const entries = [{ name: "fortschritt.json", data: JSON.stringify(progressData(), null, 2) }];
+    // aktueller Zustand des Mini-Linux – auch wenn nie „Zustand speichern“ gedrückt wurde
+    let state = null;
+    if (vm.emulator && vm.loggedIn) { try { state = await vm.emulator.save_state(); } catch {} }
+    if (!state) state = await idbGet("snapshot");
+    if (state) entries.push({ name: "mini-linux.bin", data: state }, { name: "mini-linux.json", data: JSON.stringify({ uart1: vm.emulator && vm.loggedIn ? vm.sizeChannel : !!(await idbGet("snapshot-uart1")) }) });
+    entries.push({ name: "LIESMICH.txt", data: `rootshell-Sicherung vom ${new Date().toLocaleString("de-DE")}\r\n\r\n` +
+      `fortschritt.json  Lektionen, Training, Missionen, Wargame, Prüfungen, Einstellungen\r\n` +
+      (state ? `mini-linux.bin    Zustand des Mini-Linux im Browser (Dateien, Verlauf, Wargame-Level)\r\n` : "") +
+      `\r\nWiederherstellen: rootshell öffnen → 📊 Fortschritt → „Sicherung laden“ → diese ZIP-Datei wählen.\r\n` +
+      `Nicht enthalten: Übungs-VM und Server-VM – die legt die App auf dem neuen PC frisch an.\r\n` });
+    const zip = await RsZip.create(entries);
+    download(zip, `rootshell-sicherung-${new Date().toISOString().slice(0, 10)}.zip`);
+    toast(`Sicherung erstellt (${(zip.size / 1048576).toFixed(1)} MB) – die ZIP liegt in deinen Downloads.`);
+  } catch (e) { toast("Sichern fehlgeschlagen: " + e.message); }
+  if (btn) { btn.disabled = false; btn.textContent = label; }
+}
+/* Fortschritt aus einer Sicherung prüfen und übernehmen (nur linuxlab.*-Einträge mit gültigem JSON) */
+function progressEntries(j) {
+  if (j?.app !== "rootshell" || typeof j.data !== "object") return null;
+  return Object.entries(j.data).filter(([k, v]) => k.startsWith("linuxlab.") && k !== KEYS.ssh && typeof v === "string" && (() => { try { JSON.parse(v); return true; } catch { return false; } })());
 }
 async function importProgress(file) {
-  let j;
-  try { j = JSON.parse(await file.text()); } catch { toast("Die Datei ist kein gültiges JSON."); return; }
-  if (j?.app !== "rootshell" || typeof j.data !== "object") { toast("Das ist keine rootshell-Sicherung."); return; }
-  const entries = Object.entries(j.data).filter(([k, v]) => k.startsWith("linuxlab.") && k !== KEYS.ssh && typeof v === "string" && (() => { try { JSON.parse(v); return true; } catch { return false; } })());
-  if (!entries.length) { toast("In der Datei steht kein Fortschritt."); return; }
-  if (!confirm(`Sicherung vom ${new Date(j.exported).toLocaleString("de-DE")} laden?\nDein aktueller Fortschritt in diesem Browser wird dabei ersetzt.`)) return;
+  let j, mini = null, miniUart1 = false;
+  try {
+    if (/\.zip$/i.test(file.name) || (await file.slice(0, 2).text()) === "PK") {
+      const files = await RsZip.read(await file.arrayBuffer());
+      if (!files["fortschritt.json"]) { toast("In der ZIP steht keine rootshell-Sicherung."); return; }
+      j = JSON.parse(new TextDecoder().decode(files["fortschritt.json"]));
+      if (files["mini-linux.bin"]) {
+        mini = files["mini-linux.bin"].slice().buffer;
+        try { miniUart1 = !!JSON.parse(new TextDecoder().decode(files["mini-linux.json"] || new Uint8Array())).uart1; } catch {}
+      }
+    } else j = JSON.parse(await file.text());   // ältere Sicherung als JSON
+  } catch (e) { toast("Die Datei lässt sich nicht lesen: " + e.message); return; }
+  const entries = progressEntries(j);
+  if (!entries) { toast("Das ist keine rootshell-Sicherung."); return; }
+  if (!entries.length && !mini) { toast("In der Datei steht kein Fortschritt."); return; }
+  if (!confirm(`Sicherung vom ${new Date(j.exported).toLocaleString("de-DE")} laden?\n\n` +
+    `• Lernstand: ${entries.length ? "wird ersetzt" : "nicht enthalten"}\n• Mini-Linux: ${mini ? "wird ersetzt" : "nicht enthalten"}\n\nDer aktuelle Stand in diesem Browser geht dabei verloren.`)) return;
   entries.forEach(([k, v]) => localStorage.setItem(k, v));
+  if (mini) { await idbPut("snapshot", mini); await idbPut("snapshot-uart1", miniUart1); }
   location.reload();
 }
 function resetProgress() {
@@ -1788,7 +1832,7 @@ $("#btn-progress").addEventListener("click", openProgress);
 $("#progress-close").addEventListener("click", () => $("#progress-dialog").close());
 $("#progress-body").addEventListener("click", (e) => {
   const a = e.target.closest("[data-prog]")?.dataset.prog;
-  if (a === "export") exportProgress();
+  if (a === "export") exportBackup(e.target.closest("[data-prog]"));
   else if (a === "import") $("#prog-file").click();
   else if (a === "reset") resetProgress();
   else if (a === "check") { $("#progress-dialog").close(); openCheck(); }
