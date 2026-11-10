@@ -1021,8 +1021,12 @@ function vmBox(lesson) {
       <br><small class="muted">Einmalig, dauert ein paar Minuten. ${VM_INFO[id].role}</small></div>`;
   }
   if (id === "uebung" && prepared !== lesson.id) {
+    // Braucht die Übung nichts Vorbereitetes und ist die Übungs-VM schon verbunden, darf man ohne Zurücksetzen weitermachen
+    const canSkip = !lesson.prep && R.connected && R.managedVm === "uebung" && !busyNow;
     return `<div class="box tip">🧪 <b>Übung in der Wegwerf-VM.</b> „Vorbereiten“ setzt die Übungs-VM auf „basis“ zurück${lesson.prep ? " und richtet alles ein, was du für diese Übung brauchst" : ""} (ca. 1 Minute). Danach darfst du hier alles ausprobieren.
-      <div class="btnrow"><button class="primary" data-action="prep" ${busyNow ? "disabled" : ""}>${busyNow ? "⏳ Läuft …" : "▶ Übung vorbereiten"}</button></div></div>`;
+      ${canSkip ? `<br><small class="muted">Diese Übung braucht nichts Vorbereitetes – du kannst auch einfach in der laufenden Übungs-VM weitermachen.</small>` : ""}
+      <div class="btnrow"><button class="primary" data-action="prep" ${busyNow ? "disabled" : ""}>${busyNow ? "⏳ Läuft …" : "▶ Übung vorbereiten"}</button>
+        ${canSkip ? `<button data-action="prep-skip">Ohne Zurücksetzen weiter</button>` : ""}</div></div>`;
   }
   if (R.connected && R.managedVm === id) return "";
   if (st === "Running") return `<div class="box warn">Das Terminal ist nicht mit der <b>${VM_LABEL[id]}</b> verbunden. <button class="primary" data-action="vm-connect" data-target="${id}">🔌 Verbinden</button></div>`;
@@ -1159,16 +1163,29 @@ function onCommandFinished(cmd, out) {
     try { ok = runCheck(currentCard.check, cmd, out); } catch {}
     if (ok) cardSolved();
   }
-  // 2. Lektion
+  // 2. Lektion – Schritte mit mehreren Befehlen gelten erst als erledigt, wenn die Prüfung erfüllt ist
+  //    UND der letzte gezeigte Befehl ausgeführt wurde (Reihenfolge egal, eigene Varianten zählen)
   const lesson = LESSONS[progress.lesson];
   const done = doneSet(lesson.id);
   for (let i = 0; i < lesson.steps.length; i++) {
     const s = lesson.steps[i];
     if (done.has(i) || !s.check) continue;
-    let ok = false;
-    try { ok = runCheck(s.check, cmd, out); } catch {}
-    if (ok) markDone(progress.lesson, i, true);
+    const st = (stepRun[`${lesson.id}:${i}`] ||= { checked: false, lastRun: false });
+    try { if (runCheck(s.check, cmd, out)) st.checked = true; } catch {}
+    const cmds = [].concat(s.cmd || []);
+    if (cmds.length < 2 || sameCommand(cmd, cmds[cmds.length - 1])) st.lastRun = true;
+    if (st.checked && st.lastRun) markDone(progress.lesson, i, true);
   }
+}
+/* Fortschritt innerhalb eines Schritts (nur für diese Sitzung) */
+const stepRun = {};
+/* Passt ein eingegebener Befehl zu einem gezeigten? Exakt (Leerzeichen egal) oder gleicher Anfang (3 Wörter, ohne sudo) */
+function sameCommand(typed, shown) {
+  const norm = (c) => subIP(String(c)).replace(/\s+/g, " ").trim();
+  const head = (c) => norm(c).replace(/^sudo\s+/, "").split(" ").slice(0, 3).join(" ");
+  const t = norm(typed), sh = norm(shown);
+  // mehrzeilige Befehle (Here-Documents) nur exakt – die kommen ohnehin per „übernehmen“
+  return t === sh || (!String(shown).includes("\n") && head(t) === head(sh));
 }
 
 $(".tutor").addEventListener("click", async (e) => {
@@ -1196,6 +1213,7 @@ $(".tutor").addEventListener("click", async (e) => {
   }
   if (act?.dataset.action === "vm-connect") { const id = act.dataset.target || wantedVm(); if (!isRemote()) setMode(vmMode()); connectManaged({ vm: id }); return; }
   if (act?.dataset.action === "prep") { prepareExercise(); return; }
+  if (act?.dataset.action === "prep-skip") { prepared = LESSONS[progress.lesson].id; renderLesson(); term.focus(); return; }
   if (act?.dataset.action === "prep-mini") {
     const l = LESSONS[progress.lesson];
     if (!vm.loggedIn) { toast("Das Mini-Linux startet noch – einen Moment."); return; }
