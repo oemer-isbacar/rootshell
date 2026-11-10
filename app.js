@@ -1094,8 +1094,10 @@ function renderLesson(scrollToActive = false) {
   $("#lesson").innerHTML = subIP(html);
   renderNav();
   if (scrollToActive) {
+    // Nächsten Schritt nach oben holen (nicht nur „gerade so sichtbar“) – scroll-margin-top in style.css
+    // lässt darüber das Ende des erledigten Schritts mit seiner Erklärung stehen
     const el = $("#lesson .step.active") || $("#lesson .lesson-done");
-    el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    el?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 }
 

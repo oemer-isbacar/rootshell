@@ -334,3 +334,5 @@ button.small { font-size: 12px; padding: 2px 6px; }
 .sql-msg.err { color: #fca5a5; white-space: pre-wrap; font-family: ui-monospace, Consolas, monospace; }
 .sql-msg.ok { color: var(--accent); }
 @media (max-width: 900px) { .sql-schema { display: none; } }
+/* Lektion scrollt beim Abarbeiten mit: der nächste Schritt rückt nach oben, darüber bleibt etwas vom erledigten Schritt sichtbar */
+.lesson .step.active, .lesson .lesson-done { scroll-margin-top: 110px; }
