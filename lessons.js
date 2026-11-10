@@ -175,10 +175,11 @@ window.LESSONS = [
   id: "b9-script", mode: "browser", topic: "script", stage: 1, title: "Shell-Skripte",
   intro: `Alles, was du tippst, kannst du auch in eine Datei schreiben und automatisieren. Mehrzeiligen Text schreibst du bequem mit einem <b>Here-Document</b> (<code>&lt;&lt; 'EOF'</code> … <code>EOF</code>).`,
   steps: [
-    { title: "Variablen", cmd: ['NAME="Ömer"', 'echo "Hallo $NAME"'], check: { cmd: /^echo\s.*\$\w+/ },
+    { title: "Variablen", cmd: ['NAME="Alex"', 'echo "Hallo $NAME"'], check: { cmd: /^echo\s.*\$\w+/ },
       explain: `Keine Leerzeichen um das <code>=</code>! Mit <code>$(befehl)</code> speicherst du eine Ausgabe: <code>HEUTE=$(date +%F)</code>.` },
-    { title: "Skript schreiben", text: `Kopier den Block komplett (übernehmen) und drück Enter. Die erste Zeile <code>#!/bin/sh</code> („Shebang“) sagt, welcher Interpreter das Skript ausführt.`,
-      cmd: `cat > backup.sh << 'EOF'
+    { title: "Skript schreiben", text: `Wir arbeiten im Home-Verzeichnis und sichern dort den Ordner <code>projekte</code> (aus Lektion 3 – falls er fehlt, legt der Befehl ihn an).
+        Kopier den Block komplett (übernehmen) und drück Enter. Die erste Zeile <code>#!/bin/sh</code> („Shebang“) sagt, welcher Interpreter das Skript ausführt.`,
+      cmd: `cd ~ && mkdir -p projekte && cat > backup.sh << 'EOF'
 #!/bin/sh
 # Sichert einen Ordner als Archiv mit Datum im Namen
 QUELLE="$1"
@@ -187,12 +188,18 @@ if [ -z "$QUELLE" ]; then
   echo "Aufruf: $0 <ordner>"
   exit 1
 fi
+if [ ! -d "$QUELLE" ]; then
+  echo "Fehler: Den Ordner $QUELLE gibt es hier nicht."
+  exit 2
+fi
 tar -cf - "$QUELLE" | gzip > "$ZIEL" && echo "Backup erstellt: $ZIEL"
 EOF`, check: { cmd: /backup\.sh/ },
-      explain: `<code>tar -cf -</code> schreibt das Archiv auf stdout, <code>gzip</code> komprimiert es – wieder eine Pipe. Auf Ubuntu geht das kürzer mit <code>tar -czf ziel.tar.gz ordner</code> (das BusyBox-tar hier kann kein <code>-z</code>).` },
+      explain: `<code>tar -cf -</code> schreibt das Archiv auf stdout, <code>gzip</code> komprimiert es – wieder eine Pipe. Auf Ubuntu geht das kürzer mit <code>tar -czf ziel.tar.gz ordner</code> (das BusyBox-tar hier kann kein <code>-z</code>).
+        <br><b>Warum die Prüfung mit <code>-d</code>?</b> Bei einer Pipe zählt nur der Erfolg des <i>letzten</i> Befehls: Scheitert <code>tar</code>, läuft <code>gzip</code> trotzdem durch – und ohne Prüfung würde das Skript „Backup erstellt“ melden, obwohl nichts gesichert wurde.` },
     { title: "Ausführbar machen & testen", cmd: ["chmod +x backup.sh", "./backup.sh"], task: "Starte es erst <b>ohne</b> Argument …", check: { cmd: /backup\.sh\s*$/, out: /Aufruf/ } },
-    { title: "Mit Argument", cmd: "./backup.sh projekte", check: { cmd: /backup\.sh\s+\S/, out: /Backup erstellt/ },
-      explain: `<code>$1</code> ist das erste Argument, <code>$0</code> der Skriptname, <code>$#</code> die Anzahl. <code>&&</code> führt den nächsten Befehl nur bei Erfolg aus (Exit-Code 0).` },
+    { title: "Mit Argument", text: `Das Skript liegt im Home-Verzeichnis, <code>projekte</code> auch – deshalb vorher <code>cd ~</code>, falls du inzwischen woanders bist.`,
+      cmd: "cd ~ && ./backup.sh projekte", check: { cmd: /backup\.sh\s+\S/, out: /Backup erstellt/ },
+      explain: `<code>$1</code> ist das erste Argument, <code>$0</code> der Skriptname, <code>$#</code> die Anzahl. <code>&&</code> führt den nächsten Befehl nur bei Erfolg aus (Exit-Code 0). Probier auch <code>./backup.sh gibtsnicht</code> – dann greift die Prüfung mit <code>-d</code>.` },
     { title: "Schleifen", cmd: "for i in 1 2 3; do echo \"Durchlauf $i\"; done", check: { cmd: /^for\s/, out: /Durchlauf|\w/ } },
     { title: "Exit-Code prüfen", text: `Jeder Befehl liefert einen Exit-Code: 0 = Erfolg, alles andere = Fehler. <code>$?</code> enthält den letzten.`,
       cmd: ["ls /gibtsnicht", "echo $?"], check: { cmd: /echo\s+\$\?/ } },

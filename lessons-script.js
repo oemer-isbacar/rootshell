@@ -46,7 +46,7 @@ for ((i = 1; i <= ANZAHL; i++)); do
 done
 EOF
 chmod +x ~/bin/gruss.sh`, check: { cmd: /cat\s*>\s*~\/bin\/gruss\.sh/ } },
-    { title: "Aufrufen", cmd: ["~/bin/gruss.sh", "~/bin/gruss.sh Ömer 3"], check: { cmd: /gruss\.sh\s+\S+\s+\d/, out: /3\. Hallo/ },
+    { title: "Aufrufen", cmd: ["~/bin/gruss.sh", "~/bin/gruss.sh Alex 3"], check: { cmd: /gruss\.sh\s+\S+\s+\d/, out: /3\. Hallo/ },
       explain: `<table><tr><td><code>$1</code>, <code>$2</code> …</td><td>Parameter</td></tr><tr><td><code>$0</code></td><td>Name des Skripts</td></tr><tr><td><code>$#</code></td><td>Anzahl der Parameter</td></tr><tr><td><code>"$@"</code></td><td>alle Parameter einzeln (für Schleifen)</td></tr><tr><td><code>\${VAR:-wert}</code></td><td>Standardwert, falls leer</td></tr></table>` },
     { title: "Rechnen", text: `Bash rechnet mit ganzen Zahlen in <code>$(( … ))</code>:`,
       cmd: ["echo $(( 17 + 4 * 2 ))", "BELEGT=$(df --output=pcent / | tail -1 | tr -dc 0-9)", 'echo "Belegt: $BELEGT %, frei: $(( 100 - BELEGT )) %"'],
