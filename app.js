@@ -95,13 +95,20 @@ const vm = {
   emulator: null, loggedIn: false, bootLog: "", scroll: "",
   // serielle Schnittstelle arbeitet byteweise → Umlaute als UTF-8-Bytes senden
   send(s) { this.emulator?.serial0_send(unescape(encodeURIComponent(s))); },
-  // Neue Fenstergröße mitteilen – aber unsichtbar (die Shell würde den Befehl sonst anzeigen, siehe vmFlush),
-  // nur bei echter Änderung und nur an einer leeren Eingabezeile (sonst landet stty mitten in einem Befehl oder in vi)
-  lastSize: "", mute: 0, held: "",
+  // Neue Fenstergröße mitteilen. Normalweg: über die zweite serielle Schnittstelle (ttyS1) an einen kleinen
+  // Hintergrund-Leser im Mini-Linux – die Shell bekommt davon nichts mit, nichts landet im Verlauf.
+  // Ältere gespeicherte Zustände haben ttyS1 nicht: dann stty über die Eingabezeile, Echo ausgeblendet (vmFlush),
+  // nur bei echter Änderung und nur an einer leeren Eingabezeile.
+  lastSize: "", mute: 0, held: "", uart1: false, sizeChannel: false,
   resize() {
     if (!this.loggedIn) return;
     const size = `${term.rows}x${term.cols}`;
     if (size === this.lastSize) return;
+    if (this.sizeChannel) {
+      this.lastSize = size;
+      this.emulator.serial_send_bytes(1, [...new TextEncoder().encode(`${term.rows} ${term.cols}\n`)]);
+      return;
+    }
     if (mode !== "browser" || currentInputLine() !== "") { clearTimeout(this.resizeRetry); this.resizeRetry = setTimeout(() => this.resize(), 1500); return; }
     this.lastSize = size; this.mute = Date.now();
     this.send(`stty rows ${term.rows} cols ${term.cols}\n`);
@@ -134,7 +141,13 @@ function vmFlush() {
     else if (PROMPT_RE.test(vm.bootLog)) {
       vm.loggedIn = true; vm.bootLog = "";
       vm.lastSize = `${term.rows}x${term.cols}`;
-      vm.send(`stty rows ${term.rows} cols ${term.cols}; export PS1='\\w # '; cd ~; clear\n`);
+      // Mit ttyS1: Hintergrund-Leser für Fenstergrößen starten. Danach Verlaufsdatei löschen und eine frische
+      // Shell starten (BusyBox liest ~/.ash_history beim Start) – sonst holt ↑ diese Anmeldezeile zurück.
+      const sizeReader = vm.uart1
+        ? ` ( stty -F /dev/ttyS1 -echo; while read r c; do stty -F /dev/ttyS0 rows $r cols $c; done < /dev/ttyS1 ) >/dev/null 2>&1 & clear; rm -f ~/.ash_history; exec sh`
+        : " clear";
+      vm.send(`stty rows ${term.rows} cols ${term.cols}; export PS1='\\w # '; cd ~;${sizeReader}\n`);
+      if (vm.uart1) vm.sizeChannel = true;
       if (mode === "browser") { updateStatus(); setTimeout(() => term.focus(), 200); if (settings.tab === "wargame") renderWargame(); }
     }
     return;
@@ -144,6 +157,10 @@ function vmFlush() {
 
 async function vmBoot() {
   const snapshot = await idbGet("snapshot");
+  // Zweite serielle Schnittstelle nur, wenn kein älterer Zustand ohne sie wiederhergestellt wird
+  const snapWithUart1 = snapshot ? !!(await idbGet("snapshot-uart1")) : false;
+  vm.uart1 = !snapshot || snapWithUart1;
+  vm.sizeChannel = !!snapshot && snapWithUart1;   // im gespeicherten Zustand läuft der Leser schon
   const opts = {
     wasm_path: "lib/v86.wasm",
     memory_size: 128 * 1024 * 1024,
@@ -153,6 +170,7 @@ async function vmBoot() {
     bzimage: { url: "vm/buildroot-bzimage68.bin" },
     cmdline: "tsc=reliable mitigations=off random.trust_cpu=on console=ttyS0 quiet",
     autostart: true, disable_keyboard: true, disable_mouse: true, disable_speaker: true,
+    uart1: vm.uart1,
   };
   if (snapshot) { opts.initial_state = { buffer: snapshot }; vm.loggedIn = true; }
   vm.emulator = new V86(opts);
@@ -829,7 +847,7 @@ $("#endday-form").addEventListener("submit", async (e) => {
   if (e.submitter?.value !== "ok") return;
   const stopVm = $("#endday-vm").checked, saveMini = $("#endday-mini").checked;
   if (saveMini && vm.emulator) {
-    try { await idbPut("snapshot", await vm.emulator.save_state()); } catch {}
+    try { await idbPut("snapshot", await vm.emulator.save_state()); await idbPut("snapshot-uart1", vm.sizeChannel); } catch {}
   }
   if (sb.running) await stopSandbox(false);
   if (stopVm) {
@@ -895,14 +913,14 @@ $("#btn-save").addEventListener("click", async () => {
   const btn = $("#btn-save"); btn.disabled = true; btn.textContent = "Speichere …";
   try {
     const state = await vm.emulator.save_state();
-    await idbPut("snapshot", state);
+    await idbPut("snapshot", state); await idbPut("snapshot-uart1", vm.sizeChannel);
     toast(`Zustand gespeichert (${(state.byteLength / 1048576).toFixed(0)} MB) – beim nächsten Öffnen geht's genau hier weiter.`);
   } catch (e) { toast("Speichern fehlgeschlagen: " + e.message); }
   btn.disabled = false; btn.textContent = "💾 Zustand speichern";
 });
 $("#btn-reset").addEventListener("click", async () => {
   if (!confirm("Mini-Linux neu starten? Alle Dateien darin und der gespeicherte Zustand gehen verloren. (Dein Lernfortschritt bleibt.)")) return;
-  try { await idbPut("snapshot", undefined); } catch {}
+  try { await idbPut("snapshot", undefined); await idbPut("snapshot-uart1", undefined); } catch {}
   location.reload();
 });
 

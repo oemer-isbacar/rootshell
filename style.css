@@ -85,7 +85,7 @@ kbd { font-family: ui-monospace, Consolas, monospace; font-size: 11px; border: 1
   display: flex; align-items: center; gap: 8px; margin: 8px 0 4px;
   background: var(--code-bg); border-radius: 6px; padding: 6px 8px;
 }
-.cmd pre { margin: 0; flex: 1 1 auto; font: 13px/1.4 ui-monospace, Consolas, monospace; color: var(--accent); white-space: pre-wrap; word-break: break-all; }
+.cmd pre { margin: 0; flex: 1 1 auto; font: 13px/1.4 ui-monospace, Consolas, monospace; color: var(--accent); white-space: pre-wrap; word-break: normal; overflow-wrap: anywhere; min-width: 0; }
 .cmd button { font-size: 12px; padding: 3px 8px; flex: 0 0 auto; }
 .task { font-size: 14px; color: #c7d2fe; margin-top: 6px; }
 .task::before { content: "Aufgabe: "; font-weight: 600; color: var(--link); }
